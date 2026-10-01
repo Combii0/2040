@@ -3,10 +3,13 @@
 # 11E.
 
 import tkinter as tk
+from tkinter import ttk
+
 import random
 
 import users
-import missions 
+import missions
+import resources
 
 wn = tk.Tk()
 
@@ -16,6 +19,7 @@ wn.geometry('1080x720')
 # –––––––––––––––––––––––––––––––––––––- VAR UTILITIES
 
 difficulties = ['Easy', 'Medium', 'Hard']
+activeCode = None
 
 # ––––––––––––––––––––––––––––––––––––––––––––––––––––
 
@@ -65,13 +69,20 @@ def SaveMission():
     name = missionName.get().strip()
     code = random.randint(1000000, 9999999)
 
-    information = {'Mission Name': name, 'Mission Code': code, 'Mission Difficulty': difficulty.get(), 'Mission State': 'Initializing'}
+    global activeCode
+
+    information = {
+        'Mission Name': name,
+        'Mission Code': code,
+        'Mission Difficulty': difficulty.get(),
+        'Mission State': 'Initializing'
+    }
 
     while code in missions.m:
         code = random.randint(1000000, 9999999)
-        information = {'Mission Name': name, 'Mission Code': code, 'Mission Difficulty': difficulty.get(), 'Mission State': 'Initializing'}
+        information['Mission Code'] = code
 
-    if name != '' and code != '':
+    if name:
         missions.m[code] = information
         ShowFrame(missionOverviewFrame)
 
@@ -87,8 +98,45 @@ def SaveMission():
         missionName.delete(0, tk.END)
         missionCode.delete(0, tk.END)
 
+    activeCode = code
+
+def OpenMissionControlTab():
+    missionControlName.config(text = f'Mission: {missions.m[activeCode]['Mission Name']}')
+    missionState.config(text = f'State: {missions.m[activeCode]['Mission State']}')
+    eventsProcessed.config(text = 'Events: N/A')
+    scoreShowed.config(text = 'Score: N/A')
+
+    ShowFrame(missionControlFrame)
+
 def StartMission():
-    pass
+    ShowFrame(missionControlFrame)
+    missions.m[activeCode]['Mission State'] = 'Operating'
+    missionstate.config(text = f'Mission State: {missions.m[activeCode]['Mission State']}')
+
+    resources.createResources(activeCode)
+
+    createMission.config(text = 'Mission Control', command = OpenMissionControlTab)
+
+    missionControlName.config(text = f'Mission: {missions.m[activeCode]['Mission Name']}')
+    missionState.config(text = f'State: {missions.m[activeCode]['Mission State']}')
+    eventsProcessed.config(text = 'Events: N/A')
+    scoreShowed.config(text = 'Score: N/A')
+
+def ShowResources():
+    energyValue.config(text = resources.resources[activeCode]['Energy'])
+    waterValue.config(text = resources.resources[activeCode]['Water'])
+    foodValue.config(text = resources.resources[activeCode]['Food'])
+    communicationValue.config(text = resources.resources[activeCode]['Communication'])
+
+    ShowFrame(resourcesFrame)
+
+def EndMission():
+    finalEnergyValue.config(text = resources.resources[activeCode]['Energy'])
+    finalWaterValue.config(text = resources.resources[activeCode]['Water'])
+    finalFoodValue.config(text = resources.resources[activeCode]['Food'])
+    finalCommunicationValue.config(text = resources.resources[activeCode]['Communication'])
+
+    ShowFrame(finalDataCollected)
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––-
 
@@ -120,7 +168,7 @@ missionstate.pack(anchor = 'w')
 dashboardMenuFrame = tk.Frame(dashboard)
 
 createMission = tk.Button(dashboardMenuFrame, text = 'Create Mission', command = CreateMission)
-resources = tk.Button(dashboardMenuFrame, text = 'Resources', command = None)
+resourcesButton = tk.Button(dashboardMenuFrame, text = 'Resources', command = ShowResources)
 processEvent = tk.Button(dashboardMenuFrame, text = 'Process Event', command = None)
 simulation = tk.Button(dashboardMenuFrame, text = 'Simulation', command = None)
 statistics = tk.Button(dashboardMenuFrame, text = 'Statistics', command = None)
@@ -137,7 +185,7 @@ mainTextAdvice.pack()
 # –––––––––– ORGANIZATION –––––––––––
 
 createMission.grid                  (row = 0, sticky = 'ew')
-resources.grid                      (row = 1, sticky = 'ew')
+resourcesButton.grid                      (row = 1, sticky = 'ew')
 processEvent.grid                   (row = 2, sticky = 'ew')
 simulation.grid                     (row = 3, sticky = 'ew')
 statistics.grid                     (row = 4, sticky = 'ew')
@@ -171,23 +219,23 @@ dashboardMainFrame.grid             (row = 1, column = 1, sticky = 'nsew')
 createMissionFrame = tk.Frame(dashboardMainFrame)
 
 newMissionTitle = tk.Label(createMissionFrame, text = 'NEW MISSION')
-newMissionTitle.grid                                                                                    (row = 0, column = 0, sticky = 'ew')
+newMissionTitle.grid                                                                                    (row = 0, column = 0)
 
-tk.Label(createMissionFrame, text = 'Mission Name:').grid                                               (row = 2, column = 0, sticky = 'ew')
+tk.Label(createMissionFrame, text = 'Mission Name:').grid                                               (row = 2, column = 0)
 missionName = tk.Entry(createMissionFrame)
-missionName.grid                                                                                        (row = 3, column = 0, sticky = 'ew')
+missionName.grid                                                                                        (row = 3, column = 0)
 
 difficulty = tk.StringVar(createMissionFrame)
 difficulty.set(difficulties[0])
 
 difficultySelector = tk.OptionMenu(createMissionFrame, difficulty, *difficulties)
-difficultySelector.grid                                                                                 (row = 8, column = 0, sticky = 'ew')
+difficultySelector.grid                                                                                 (row = 8, column = 0)
 
 createMissionButton = tk.Button(createMissionFrame, text = 'Create', command = SaveMission)
-createMissionButton.grid                                                                                (row = 10, column = 0, sticky = 'ew')
+createMissionButton.grid                                                                                (row = 10, column = 0)
 
 missionCreationStatus = tk.Label(createMissionFrame, text = '')
-missionCreationStatus.grid                                                                              (row = 12, column = 0, sticky = 'ew')
+missionCreationStatus.grid                                                                              (row = 12, column = 0)
 
 # ––––––– SHOW MISSION –––––––
 
@@ -198,10 +246,89 @@ missionCode = tk.Label(missionOverviewFrame, text = 'Code: N/A')
 missionDifficulty = tk.Label(missionOverviewFrame, text = 'Difficulty: N/A')
 missionStartButton = tk.Button(missionOverviewFrame, text = 'Start Mission', command = StartMission)
 
-missionTitle.grid                                                                                       (row = 0, column = 0, sticky = 'nsew')
-missionCode.grid                                                                                        (row = 1, column = 0, sticky = 'nsew')
-missionDifficulty.grid                                                                                  (row = 2, column = 0, sticky = 'nsew')
-missionStartButton.grid                                                                                 (row = 4, column = 0, sticky = 'nsew')
+missionTitle.grid                                                                                       (row = 0, column = 0)
+missionCode.grid                                                                                        (row = 1, column = 0)
+missionDifficulty.grid                                                                                  (row = 2, column = 0)
+missionStartButton.grid                                                                                 (row = 4, column = 0)
+
+# –––––– START MISSION –––––––
+
+missionControlFrame = tk.Frame(dashboardMainFrame)
+
+tk.Label(missionControlFrame, text = 'MISSION CONTROL', anchor = 'center').grid(row = 0, column = 0)
+missionControlName = tk.Label(missionControlFrame, text = 'Mission: N/A', anchor = 'center')
+missionState = tk.Label(missionControlFrame, text = 'State: N/A', anchor = 'center')
+eventsProcessed = tk.Label(missionControlFrame, text = 'Events: N/A', anchor = 'center')
+scoreShowed = tk.Label(missionControlFrame, text = 'Score: N/A', anchor = 'center')
+endMissionButton = tk.Button(missionControlFrame, text = 'End Mission', command = EndMission, anchor = 'center')
+
+missionControlName.grid(row = 1, column = 0)
+missionState.grid(row = 4, column = 0)
+eventsProcessed.grid(row = 6, column = 0)
+scoreShowed.grid(row = 7, column = 0)
+
+endMissionButton.grid(row = 10, column = 0)
+
+
+# –––––– RESOURCES ––––––
+
+resourcesFrame = tk.Frame(dashboardMainFrame)
+
+energyLabel = tk.Label(resourcesFrame, text = 'Energy')
+waterLabel = tk.Label(resourcesFrame, text = 'Water')
+foodLabel = tk.Label(resourcesFrame, text = 'Food')
+communicationLabel = tk.Label(resourcesFrame, text = 'Communication')
+
+energyValue = tk.Label(resourcesFrame, text = 'No database detected')
+waterValue = tk.Label(resourcesFrame, text = 'No database detected')
+foodValue = tk.Label(resourcesFrame, text = 'No database detected')
+communicationValue = tk.Label(resourcesFrame, text = 'No database detected')
+
+energyLabel.grid(row = 0, column = 0)
+energyValue.grid(row = 0, column = 1)
+waterLabel.grid(row = 1, column = 0)
+waterValue.grid(row = 1, column = 1)
+foodLabel.grid(row = 2, column = 0)
+foodValue.grid(row = 2, column = 1)
+communicationLabel.grid(row = 3, column = 0)
+communicationValue.grid(row = 3, column = 1)
+
+# ––––– END MISSION ––––––
+
+finalDataCollected = tk.Frame(dashboardMainFrame)
+
+tk.Label(finalDataCollected, text = 'MISSION REPORT', anchor = 'center').grid(row = 0, column = 0)
+
+finalScoreLabel = tk.Label(finalDataCollected, text = 'Score: ERROR MISSING VAR', anchor = 'center')
+finalScoreLabel.grid(row = 2, column = 0)
+
+tk.Label(finalDataCollected, text = 'Resources:', anchor = 'center').grid(row = 4, column = 0)
+
+finalResourcesFrame = tk.Frame(finalDataCollected)
+
+finalEnergyLabel = tk.Label(finalResourcesFrame, text = 'Energy', anchor = 'center')
+finalWaterLabel = tk.Label(finalResourcesFrame, text = 'Water', anchor = 'center')
+finalFoodLabel = tk.Label(finalResourcesFrame, text = 'Food', anchor = 'center')
+finalCommunicationLabel = tk.Label(finalResourcesFrame, text = 'Communication', anchor = 'center')
+
+finalEnergyValue = tk.Label(finalResourcesFrame, text = 'No database detected', anchor = 'center')
+finalWaterValue = tk.Label(finalResourcesFrame, text = 'No database detected', anchor = 'center')
+finalFoodValue = tk.Label(finalResourcesFrame, text = 'No database detected', anchor = 'center')
+finalCommunicationValue = tk.Label(finalResourcesFrame, text = 'No database detected', anchor = 'center')
+
+finalResourcesFrame.grid(row = 6, column = 0)
+
+finalEnergyLabel.grid(row = 0, column = 0)
+finalEnergyValue.grid(row = 0, column = 1)
+finalWaterLabel.grid(row = 1, column = 0)
+finalWaterValue.grid(row = 1, column = 1)
+finalFoodLabel.grid(row = 2, column = 0)
+finalFoodValue.grid(row = 2, column = 1)
+finalCommunicationLabel.grid(row = 3, column = 0)
+finalCommunicationValue.grid(row = 3, column = 1)
+
+endContinueButton = tk.Button(finalResourcesFrame, text = 'Continue', command = None)
+
 
 
 wn.mainloop()
