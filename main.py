@@ -27,6 +27,8 @@ activeCode = None
 eventsAttended = 0
 SCORE = 0
 
+finalRank = 'B'
+
 historyCodes = []
 
 # ––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -443,6 +445,206 @@ def ClosePopUp(option, eventWindow):
 
     ShowResources()
 
+def GenerateReport():
+    if activeCode is None:
+        return
+
+    mission = missions.m[activeCode]
+
+    report = ''
+
+    report += 'ROBOYORK 2040 - MISSION REPORT\n'
+    report += '================================\n\n'
+
+    report += f'Mission Name: {mission["Mission Name"]}\n'
+    report += f'Mission Code: {mission["Mission Code"]}\n'
+    report += f'Difficulty: {mission["Mission Difficulty"]}\n'
+    report += f'Final State: {mission["Mission State"]}\n\n'
+
+    report += 'STATISTICS\n'
+    report += '–––––––––––––––––––––––––––––––\n'
+
+    report += f'Score: {mission["Final Score"]}\n'
+    report += f'Events Processed: {mission["Events Processed"]}\n\n'
+    report += f'Rank: {determineRank()}'
+
+    report += 'FINAL RESOURCES\n'
+    report += '–––––––––––––––––––––––––––––––\n'
+
+    report += f'Energy: {mission["Final Resources"]["Energy"]}\n'
+    report += f'Water: {mission["Final Resources"]["Water"]}\n'
+    report += f'Food: {mission["Final Resources"]["Food"]}\n'
+    report += f'Communication: {mission["Final Resources"]["Communication"]}\n\n'
+
+    report += 'MISSION HISTORY\n'
+    report += '–––––––––––––––––––––––––––––––\n'
+
+    for action in mission['History']:
+        report += f'- {action}\n'
+
+    defaultName = f'{mission["Mission Name"]}_{mission["Mission Code"]}.txt'
+
+    reportPath = filedialog.asksaveasfilename(
+        title = 'Download Mission Report',
+        initialfile = defaultName,
+        defaultextension = '.txt',
+        filetypes = [
+            ('Text files', '*.txt'),
+            ('All files', '*.*')
+        ]
+    )
+
+    if reportPath:
+        with open(reportPath, 'w', encoding = 'utf-8') as file:
+            file.write(report)
+
+def determineRank():
+
+    # F:
+
+    if SCORE <= 100:
+        finalRank = 'F-'
+    elif SCORE <= 150 and SCORE > 100:
+        finalRank = 'F'
+    elif SCORE < 200 and SCORE > 150:
+        finalRank = 'F+'
+
+    # E:
+
+    if SCORE >= 200 and SCORE < 250:
+        finalRank = 'E-'
+    elif SCORE >= 250 and SCORE < 300:
+        finalRank = 'E'
+    elif SCORE >= 300 and SCORE < 350:
+        finalRank = 'E+'
+
+    # D:
+
+    if SCORE >= 350 and SCORE < 400:
+        finalRank = 'D-'
+    elif SCORE >= 400 and SCORE < 450:
+        finalRank = 'D'
+    elif SCORE >= 450 and SCORE < 500:
+        finalRank = 'D+'
+
+    # C:
+
+    if SCORE >= 500 and SCORE < 550:
+        finalRank = 'C-'
+    elif SCORE >= 550 and SCORE < 600:
+        finalRank = 'C'
+    elif SCORE >= 600 and SCORE < 650:
+        finalRank = 'C+'
+
+    # B:
+
+    if SCORE >= 650 and SCORE < 700:
+        finalRank = 'B-'
+    elif SCORE >= 700 and SCORE < 750:
+        finalRank = 'B'
+    elif SCORE >= 750 and SCORE < 800:
+        finalRank = 'B+'
+
+    # A:
+
+    if SCORE >= 800 and SCORE < 850:
+        finalRank = 'A-'
+    elif SCORE >= 850 and SCORE < 950:
+        finalRank = 'A'
+    elif SCORE >= 950 and SCORE < 1000:
+        finalRank = 'A+'
+
+    # 'S:
+
+    if SCORE >= 1000 and SCORE < 1250:
+        finalRank = 'S-'
+    elif SCORE >= 1250 and SCORE < 1500:
+        finalRank = 'S'
+    elif SCORE >= 1500:
+        finalRank = 'S+, Perfect!'
+
+    return finalRank
+
+def ShowSimulationResults(simulationResults):
+    simulationWindow = tk.Toplevel(wn)
+
+    simulationWindow.title('SIMULATION RESULTS')
+    simulationWindow.geometry('500x400')
+
+    tk.Label(simulationWindow, text = 'SIMULATION COMPLETED').pack(pady = 10)
+
+    simulationList = tk.Listbox(simulationWindow, width = 70, height = 12)
+    simulationList.pack(pady = 10)
+
+    for result in simulationResults:
+        simulationList.insert(tk.END, result)
+
+    tk.Label(simulationWindow, text = f'Score: {SCORE}').pack()
+
+    tk.Label(simulationWindow, text = f'Events Processed: {eventsAttended}').pack()
+    tk.Button(simulationWindow, text = 'Continue', command = lambda: EndSimulation(simulationWindow)).pack(pady = 10)
+
+def EndSimulation(simulationWindow):
+    simulationWindow.destroy
+
+    EndMission()
+
+def RunSimulation():
+    global eventsAttended
+    global missionType
+
+    if activeCode is None:
+        return
+
+    difficultyLevel = missions.m[activeCode]['Mission Difficulty']
+
+    if difficultyLevel == 'Easy':
+        simulationEvents = 10
+
+    elif difficultyLevel == 'Medium':
+        simulationEvents = 15
+
+    else:
+        simulationEvents = 20
+
+    simulationResults = []
+
+    RegisterAction(f'Simulation started: {simulationEvents} events')
+
+    for i in range(simulationEvents):
+        events.newEvent()
+
+        missionType = events.possibleEvents[events.event]
+
+        option = random.randint(0, 4)
+
+        eventsAttended += 1
+
+        RegisterAction(f'Simulation Event: {missionType}')
+
+        DamageResources(option)
+        NoImpossibleValuesInMyHouseBro()
+
+        selectedAction = events.possibleActions[missionType][option]['Text']
+
+        RegisterAction(f'Simulation Action: {selectedAction}')
+        simulationResults.append(f'{i + 1}. {missionType} → {selectedAction}')
+
+    missions.m[activeCode]['Mission State'] = 'Operating'
+
+    missionState.config(text = f'State: {missions.m[activeCode]["Mission State"]}')
+    missionstate.config(text = f'Mission State: {missions.m[activeCode]["Mission State"]}')
+
+    eventsProcessed.config(text = f'Events: {eventsAttended}')
+    eventsStats.config(text = eventsAttended)
+
+    scoreShowed.config(text = f'Score: {SCORE}')
+    scoreStats.config(text = SCORE)
+
+    RegisterAction(f'Simulation finished | Score: {SCORE}')
+
+    ShowSimulationResults(simulationResults)
+
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––-
 
 button = tk.Button(panel, text = 'Log In', command = initiateLogin)
@@ -479,7 +681,7 @@ processEvent = tk.Button(dashboardMenuFrame, text = 'Process Event', command = S
 simulation = tk.Button(dashboardMenuFrame, text = 'Simulation', command = None)
 statistics = tk.Button(dashboardMenuFrame, text = 'Statistics', command = Stats)
 history = tk.Button(dashboardMenuFrame, text = 'History', command = ShowHistory)
-generateReport = tk.Button(dashboardMenuFrame, text = 'Generate Report', command = None)
+generateReport = tk.Button(dashboardMenuFrame, text = 'Generate Report', command = GenerateReport)
 backupButton = tk.Button(dashboardMenuFrame, text = 'Save Backup', command = SaveBackup)
 missionReportButton = tk.Button(dashboardMenuFrame, text = 'Mission Report', command = ShowFinalReport)
 logOut = tk.Button(dashboardMenuFrame, text = 'Log Out', command = LogOut)
@@ -616,6 +818,9 @@ tk.Label(finalDataCollected, text = 'MISSION REPORT', anchor = 'center').pack()
 
 finalScoreLabel = tk.Label(finalDataCollected, text = 'Score: N/A', anchor = 'center')
 finalScoreLabel.pack()
+
+finalRankDetected = tk.Label(finalDataCollected, text = f'Rank: {determineRank()}', anchor = 'center')
+finalRankDetected.pack()
 
 tk.Label(finalDataCollected, text = 'Resources:', anchor = 'center').pack()
 
