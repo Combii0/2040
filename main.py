@@ -36,6 +36,7 @@ DARK = '#182019'
 PANEL = '#202A22'
 BUTTON = '#2A382F'
 MUTED = '#94A197'
+CYAN = '#5EB7C1'
 
 resourceFolder = os.path.join(os.path.dirname(__file__), 'Resources')
 regularFontPath = os.path.join(resourceFolder, 'pixeloid.ttf')
@@ -364,6 +365,16 @@ try:
 except FileNotFoundError:
     createdOperators = {}
 
+damages = []
+
+damagePadRunning = False
+damagePadJob = None
+damageID = 0
+eventPopUpOpened = False
+
+terminalBlinkState = False
+terminalBlinkJob = None
+
 # ––––––––––––––––––––––––––––––––––––––––––––––––––––
 
 panel = tk.Frame(wn)
@@ -669,6 +680,7 @@ def OpenMissionControlTab():
 
     UpdateEndMissionButton()
     ShowFrame(missionControlFrame)
+    missionControlCanvas.yview_moveto(0)
 
 def StartMission():
     global correctDecisions
@@ -692,6 +704,8 @@ def StartMission():
     events.setDifficulty(missions.m[activeCode]['Mission Difficulty'])
     resources.createResources(activeCode)
 
+    SpawnInitialDamages()
+
     RegisterAction('Mission started')
 
     createMission.config(text = 'Mission Control', command = OpenMissionControlTab)
@@ -709,6 +723,7 @@ def StartMission():
 
     UpdateEndMissionButton()
     ShowMissionMenu()
+    missionControlCanvas.yview_moveto(0)
 
 def ShowResources():
     if activeCode is None:
@@ -1088,9 +1103,7 @@ def ShowHistory():
     missionList = []
 
     for code in historyCodes:
-        missionList.append(
-            f'{code} - {missions.m[code]["Mission Name"]}'
-        )
+        missionList.append(f'{code} - {missions.m[code]["Mission Name"]}')
 
     historyMissionSelector['values'] = missionList
 
@@ -1217,9 +1230,7 @@ def ClosePopUp(option, eventWindow):
     RegisterAction(f'Action selected: {selectedAction}')
     RegisterDecision(option)
 
-    RegisterAction(
-        f'Energy: {resources.resources[activeCode]["Energy"]} | Water: {resources.resources[activeCode]["Water"]} | Food: {resources.resources[activeCode]["Food"]} | Communication: {resources.resources[activeCode]["Communication"]} | Score: {SCORE}'
-    )
+    RegisterAction(f'Energy: {resources.resources[activeCode]["Energy"]} | Water: {resources.resources[activeCode]["Water"]} | Food: {resources.resources[activeCode]["Food"]} | Communication: {resources.resources[activeCode]["Communication"]} | Score: {SCORE}')
 
     eventWindow.grab_release()
     eventWindow.destroy()
@@ -1454,7 +1465,6 @@ def RunSimulation():
         eventsAttended += 1
 
         RegisterAction(f'Simulation Event: {missionType}')
-
         DamageResources(option)
         NoImpossibleValuesInMyHouseBro()
 
@@ -1462,9 +1472,7 @@ def RunSimulation():
 
         RegisterAction(f'Simulation Action: {selectedAction}')
         RegisterDecision(option)
-        RegisterAction(
-            f'Energy: {resources.resources[activeCode]["Energy"]} | Water: {resources.resources[activeCode]["Water"]} | Food: {resources.resources[activeCode]["Food"]} | Communication: {resources.resources[activeCode]["Communication"]} | Score: {SCORE}'
-        )
+        RegisterAction(f'Energy: {resources.resources[activeCode]["Energy"]} | Water: {resources.resources[activeCode]["Water"]} | Food: {resources.resources[activeCode]["Food"]} | Communication: {resources.resources[activeCode]["Communication"]} | Score: {SCORE}')
 
         simulationResults.append(f'{i + 1}. {missionType} → {selectedAction}')
 
@@ -1483,6 +1491,316 @@ def RunSimulation():
 
     ShowSimulationResults(simulationResults)
 
+def UpdateMissionControlScroll(event = None):
+    missionControlCanvas.configure(
+        scrollregion = missionControlCanvas.bbox('all')
+    )
+
+def ResizeMissionControlContent(event):
+    missionControlCanvas.itemconfigure(
+        missionControlWindow,
+        width = event.width
+    )
+
+def MissionControlMouseWheel(event):
+    if not missionControlFrame.winfo_ismapped():
+        return
+
+    pointerX = wn.winfo_pointerx()
+    pointerY = wn.winfo_pointery()
+
+    frameX = missionControlFrame.winfo_rootx()
+    frameY = missionControlFrame.winfo_rooty()
+    frameWidth = missionControlFrame.winfo_width()
+    frameHeight = missionControlFrame.winfo_height()
+
+    if frameX <= pointerX <= frameX + frameWidth and frameY <= pointerY <= frameY + frameHeight:
+        if event.delta > 0:
+            missionControlCanvas.yview_scroll(-1, 'units')
+
+        elif event.delta < 0:
+            missionControlCanvas.yview_scroll(1, 'units')
+
+        return 'break'
+
+def BlinkTerminal():
+    global terminalBlinkState
+    global terminalBlinkJob
+
+    terminalBlinkState = not terminalBlinkState
+
+    if terminalBlinkState:
+        damageCanvas.itemconfig(
+            'terminalCore',
+            state = 'hidden'
+        )
+
+    else:
+        damageCanvas.itemconfig(
+            'terminalCore',
+            state = 'normal'
+        )
+
+    terminalBlinkJob = wn.after(
+        450,
+        BlinkTerminal
+    )
+
+def GridToCanvas(x, y):
+    centerX = damagePadWidth / 2
+    centerY = damagePadHeight / 2
+
+    canvasX = centerX + (x * damageCellSize)
+    canvasY = centerY - (y * damageCellSize)
+
+    return canvasX, canvasY
+
+def DrawDamagePad():
+    damageCanvas.delete('all')
+
+    centerX = damagePadWidth / 2
+    centerY = damagePadHeight / 2
+
+    for x in range(-damageLimitX, damageLimitX + 1):
+        canvasX, canvasY = GridToCanvas(x, 0)
+
+        damageCanvas.create_line(
+            canvasX,
+            0,
+            canvasX,
+            damagePadHeight,
+            fill = BUTTON
+        )
+
+    for y in range(-damageLimitY, damageLimitY + 1):
+        canvasX, canvasY = GridToCanvas(0, y)
+
+        damageCanvas.create_line(0, canvasY, damagePadWidth, canvasY, fill = BUTTON)
+
+    damageCanvas.create_line(centerX, 0, centerX, damagePadHeight, fill = TEAL, width = 2)
+    damageCanvas.create_line(0, centerY, damagePadWidth, centerY, fill = TEAL, width = 2)
+    
+    terminalCanvasX, terminalCanvasY = GridToCanvas(terminalX, terminalY)
+
+    damageCanvas.create_oval(
+        terminalCanvasX - 6,
+        terminalCanvasY - 6,
+        terminalCanvasX + 6,
+        terminalCanvasY + 6,
+        fill = CYAN,
+        outline = CYAN,
+        tags = 'terminalCore'
+    )
+
+    damageCanvas.create_text(
+        terminalCanvasX + 16,                                                          #                            ⢀⡴⠑⡄⠀⠀⠀⠀⠀⠀⠀⣀⣀⣤⣤⣤⣀⡀⠀⠀
+        terminalCanvasY,                                                               #                            ⠸⡇⠀⠿⡀⠀⠀⠀⣀⡴⢿⣿⣿⣿⣿⣿⣿⣿⣷⣦⡀⠀⠀
+        text = 'TERMINAL',                                                             #                            ⠀⠀⠀⠀⠑⢄⣠⠾⠁⣀⣄⡈⠙⣿⣿⣿⣿⣿⣿⣿⣿⣆⠀⠀⠀⠀
+        fill = CYAN,                                                                   #                            ⠀⠀⠀⠀⢀⡀⠁⠀⠀⠈⠙⠛⠂⠈⣿⣿⣿⣿⣿⠿⡿⢿⣆⠀⠀⠀⠀
+        font = FONT_SMALL,                                                             #                            ⠀⠀⠀⢀⡾⣁⣀⠀⠴⠂⠙⣗⡀⠀⢻⣿⣿⠭⢤⣴⣦⣤⣹⠀⠀⠀⢀⢴⣶⣆ 
+        anchor = 'w',                                                                  #                            ⠀⠀⢀⣾⣿⣿⣿⣷⣮⣽⣾⣿⣥⣴⣿⣿⡿⢂⠔⢚⡿⢿⣿⣦⣴⣾⠁⠸⣼⡿ 
+        tags = 'terminalText'                                                          #                            ⠀⢀⡞⠁⠙⠻⠿⠟⠉⠀⠛⢹⣿⣿⣿⣿⣿⣌⢤⣼⣿⣾⣿⡟⠉⠀⠀⠀⠀⠀ 
+    )                                                                                  #                            ⠀⣾⣷⣶⠇⠀⠀⣤⣄⣀⡀⠈⠻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀
+                                                                                       #                            ⠀⠉⠈⠉⠀⠀⢦⡈⢻⣿⣿⣿⣶⣶⣶⣶⣤⣽⡹⣿⣿⣿⣿⡇⠀⠀⠀⠀
+    global terminalBlinkJob                                                            #                            ⠀⠀⠀⠀⠀⠀⠀⠉⠲⣽⡻⢿⣿⣿⣿⣿⣿⣿⣷⣜⣿⣿⣿⡇⠀
+    global terminalBlinkState                                                          #                            ⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⣿⣷⣶⣮⣭⣽⣿⣿⣿⣿⣿⣿⣿⠀⠀
+                                                                                       #                            ⠀⠀⠀⠀ ⠀⣀⣀⣈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠇⠀
+    terminalBlinkState = False                                                         #                            ⠀⠀⠀⠀⠀ ⢿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠃⠀⠀
+                                                                                       #                                ⠀⠀⠀⠹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⠟⠁
+    if terminalBlinkJob is not None:                                                   #                                     ⠉⠛⠻⠿⠿⠿⠿⠛⠉
+        try:
+            wn.after_cancel(terminalBlinkJob)
+        except tk.TclError:
+            pass
+
+    for damage in damages:
+        DrawDamage(damage)
+    
+    BlinkTerminal()
+#                                                                                                        DIOMIO YA ES MUCHO CÓDIGOOOOO, se ve hasta lindo eh
+def DamageCoordinateOccupied(x, y):
+    for damage in damages:
+        if damage['X'] == x and damage['Y'] == y:
+            return True
+
+    return False
+
+def SpawnDamage(quadrant):
+    global damageID
+
+    if quadrant == 1:
+        x = random.randint(1, damageLimitX)
+        y = random.randint(1, damageLimitY)
+
+    elif quadrant == 2:
+        x = random.randint(-damageLimitX, -1)
+        y = random.randint(1, damageLimitY)
+
+    elif quadrant == 3:
+        x = random.randint(-damageLimitX, -1)
+        y = random.randint(-damageLimitY, -1)
+
+    else:
+        x = random.randint(1, damageLimitX)
+        y = random.randint(-damageLimitY, -1)
+
+    while DamageCoordinateOccupied(x, y):
+        if quadrant == 1:
+            x = random.randint(1, damageLimitX)
+            y = random.randint(1, damageLimitY)
+
+        elif quadrant == 2:
+            x = random.randint(-damageLimitX, -1)
+            y = random.randint(1, damageLimitY)
+
+        elif quadrant == 3:
+            x = random.randint(-damageLimitX, -1)
+            y = random.randint(-damageLimitY, -1)
+
+        else:
+            x = random.randint(1, damageLimitX)
+            y = random.randint(-damageLimitY, -1)
+
+    damageID += 1
+
+    damage = {'ID': damageID, 'X': x, 'Y': y}
+
+    damages.append(damage)
+    DrawDamage(damage)
+
+def DrawDamage(damage):
+    canvasX, canvasY = GridToCanvas(damage['X'], damage['Y'])
+
+    damageCanvas.create_rectangle(
+        canvasX - 6,
+        canvasY - 6,
+        canvasX + 6,
+        canvasY + 6,
+        fill = ROSE,
+        outline = ROSE,
+        tags = ('damage', f'damage_{damage["ID"]}')
+    )
+
+    damageCanvas.tag_bind(
+        f'damage_{damage["ID"]}',
+        '<Button-1>',
+        lambda event, damageID = damage['ID']: RepairDamage(damageID)
+    )
+
+    damageCanvas.tag_bind(
+        f'damage_{damage['ID']}',
+        '<Enter>',
+        lambda event: damageCanvas.config(cursor = 'hand2')
+    )
+
+    damageCanvas.tag_bind(
+        f'damage_{damage['ID']}',
+        '<Leave>',
+        lambda event: damageCanvas.condig(cursor = '')
+    )
+
+def SpawnInitialDamages():
+    global damages
+    global damageID
+
+    damages = []
+    damageID = 0
+
+    damageCanvas.delete('damage')
+
+    SpawnDamage(1)
+    SpawnDamage(2)
+    SpawnDamage(3)
+    SpawnDamage(4)
+
+    damagePadStatus.config(text = f'ACTIVE DAMAGES: {len(damages)}')
+
+def RepairDamage(damageID):
+    if activeCode is None:
+        return
+
+    if activeCode not in resources.resources:
+        return
+
+    if missions.m[activeCode].get('Mission Ended', False):
+        return
+
+    damageDetected = None
+
+    for damage in damages:
+        if damage['ID'] == damageID:
+            damageDetected = damage
+            break
+
+    if damageDetected is None:
+        return
+
+    if resources.resources[activeCode]['Energy'] < 4:
+        damagePadStatus.config(text = 'INSUFFICIENT ENERGY – REPAIR REQUIRES MORE THAN 3')
+        return
+
+    resources.resources[activeCode]['Energy'] -= 3
+    damages.remove(damageDetected)
+
+    damageCanvas.delete(f'damage_{damageID}')
+    RegisterAction(f'Damaged repaired at ({damageDetected['X']}, {damageDetected['Y']}) | Energy -3.')
+
+    SpawnDamage(random.randint(1, 4))
+    SpawnDamage(random.randint(1, 4))
+
+    damagePadStatus.config(text = f'ACTIVE DAMAGES: {len(damages)} | REPAIR COST: 3 - ENERGY')
+
+    energyValue.config(text = resources.resources[activeCode]['Energy'])
+    energyStats.config(text = resources.resources[activeCode]['Energy'])
+
+    UptadeResourceColors()
+    UptadeMissionState('Damage Pad Repair')
+
+def MoveDamageTowardsTerminal(damage):
+    possibleMoves = []
+
+    x = damage['X']
+    y = damage['Y']
+
+    if x < terminalX:
+        possibleMoves.append((x + 1, y))
+
+    elif x > terminalX:
+        possibleMoves.append((x - 1, y))
+
+    if y < terminalY:
+        possibleMoves.append((x, y + 1))
+
+    elif y > terminalY:
+        possibleMoves.append((x, y - 1))
+
+    if len(possibleMoves) == 0:
+        return
+
+    newX, newY = random.choice(possibleMoves)
+
+    damage['X'] = newX
+    damage['Y'] = newY
+
+def MoveDamages():
+    global damagePadJob
+
+    if not damagePadRunning:
+        return
+
+    if activeCode is None:
+        return
+
+    if missions.m[activeCode].get('Mission Ended', False):
+        return
+
+    for damage in damages.copy():
+        MoveDamageTowardsTerminal(damage)
+
+    DrawDamagePad()
+
+    damagePadJob = wn.after(1500, MoveDamages)
+
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––-
 
 button = PixelButton(panel, text = 'Log In', command = initiateLogin)
@@ -1494,27 +1812,9 @@ backToLoginButton = PixelButton(operatorPanel, text = 'Back', command = BackToLo
 
 # ––––––– LOGIN ––––––––
 
-panel.config(
-    bg = DARK,
-    padx = 54,
-    pady = 44,
-    highlightbackground = TEAL,
-    highlightthickness = 2
-)
-
-phrase.config(
-    text = '2040\nCONTROL SYSTEM',
-    bg = DARK,
-    fg = CREAM,
-    font = FONT_HERO,
-    justify = 'center'
-)
-
-initiatePhrase.config(
-    bg = DARK,
-    fg = TEAL,
-    font = FONT_SMALL
-)
+panel.config(bg = DARK, padx = 54, pady = 44, highlightbackground = TEAL, highlightthickness = 2)
+phrase.config(text = '2040\nCONTROL SYSTEM', bg = DARK, fg = CREAM, font = FONT_HERO, justify = 'center')
+initiatePhrase.config(bg = DARK, fg = TEAL, font = FONT_SMALL)
 
 StyleEntry(user)
 StyleEntry(password)
@@ -1541,25 +1841,10 @@ initiatePhrase.pack(pady = (18, 0))
 
 # ––––––– CREATE OPERATOR ––––––––
 
-operatorPanel.config(
-    bg = DARK,
-    padx = 54,
-    pady = 44,
-    highlightbackground = TEAL,
-    highlightthickness = 2
-)
+operatorPanel.config(bg = DARK, padx = 54, pady = 44, highlightbackground = TEAL, highlightthickness = 2)
+operatorPhrase.config(bg = DARK, fg = CREAM, font = FONT_SECTION)
 
-operatorPhrase.config(
-    bg = DARK,
-    fg = CREAM,
-    font = FONT_SECTION
-)
-
-operatorStatus.config(
-    bg = DARK,
-    fg = ROSE,
-    font = FONT_SMALL
-)
+operatorStatus.config(bg = DARK, fg = ROSE, font = FONT_SMALL)
 
 StyleEntry(newOperatorUser)
 StyleEntry(newOperatorPassword)
@@ -1598,43 +1883,19 @@ dashboardTopFrame = tk.Frame(dashboard, bg = DARK, padx = 24, pady = 14)
 brandFrame = tk.Frame(dashboardTopFrame, bg = DARK)
 brandFrame.pack(side = 'left')
 
-brandLabel = tk.Label(
-    brandFrame,
-    text = 'ROBOYORK 2040',
-    bg = DARK,
-    fg = CREAM,
-    font = FONT_SECTION
-)
+brandLabel = tk.Label(brandFrame, text = 'ROBOYORK 2040', bg = DARK, fg = CREAM, font = FONT_SECTION)
 brandLabel.pack(anchor = 'w')
 
-brandSubtitle = tk.Label(
-    brandFrame,
-    text = 'EMERGENCY CONTROL SYSTEM',
-    bg = DARK,
-    fg = TEAL,
-    font = FONT_SMALL
-)
+brandSubtitle = tk.Label(brandFrame, text = 'EMERGENCY CONTROL SYSTEM', bg = DARK, fg = TEAL, font = FONT_SMALL)
 brandSubtitle.pack(anchor = 'w', pady = (2, 0))
 
 topStatusFrame = tk.Frame(dashboardTopFrame, bg = DARK)
 topStatusFrame.pack(side = 'right')
 
-dashboardUser = tk.Label(
-    topStatusFrame,
-    text = 'User: ',
-    bg = DARK,
-    fg = CREAM,
-    font = FONT_BODY
-)
+dashboardUser = tk.Label(topStatusFrame, text = 'User: ', bg = DARK, fg = CREAM, font = FONT_BODY)
 dashboardUser.pack(anchor = 'e')
 
-missionstate = tk.Label(
-    topStatusFrame,
-    text = 'Mission State: No mission',
-    bg = DARK,
-    fg = CREAM,
-    font = FONT_BODY_BOLD
-)
+missionstate = tk.Label(topStatusFrame, text = 'Mission State: No mission', bg = DARK, fg = CREAM, font = FONT_BODY_BOLD)
 missionstate.pack(anchor = 'e', pady = (4, 0))
 
 # ––––––––– SIDE MENU –––––––––
@@ -1872,10 +2133,77 @@ missionStartButton.pack(fill = 'x', pady = (24, 0))
 # –––––– START MISSION –––––––
 
 missionControlFrame = tk.Frame(dashboardMainFrame, bg = DARK)
-missionControlFrame.grid_anchor('center')
+
+missionControlFrame.columnconfigure(0, weight = 1)
+missionControlFrame.rowconfigure(0, weight = 1)
+
+missionControlCanvas = tk.Canvas(
+    missionControlFrame,
+    bg = DARK,
+    highlightthickness = 0
+)
+
+missionControlScroll = tk.Scrollbar(
+    missionControlFrame,
+    orient = 'vertical',
+    command = missionControlCanvas.yview,
+    bg = TEAL,
+    activebackground = GREEN,
+    troughcolor = DARK,
+    relief = 'flat',
+    bd = 0
+)
+
+missionControlCanvas.config(
+    yscrollcommand = missionControlScroll.set
+)
+
+missionControlCanvas.grid(
+    row = 0,
+    column = 0,
+    sticky = 'nsew'
+)
+
+missionControlScroll.grid(
+    row = 0,
+    column = 1,
+    sticky = 'ns'
+)
+
+missionControlContent = tk.Frame(
+    missionControlCanvas,
+    bg = DARK
+)
+
+missionControlContent.columnconfigure(
+    0,
+    weight = 1
+)
+
+missionControlWindow = missionControlCanvas.create_window(
+    (0, 0),
+    window = missionControlContent,
+    anchor = 'nw'
+)
+
+missionControlContent.bind(
+    '<Configure>',
+    UpdateMissionControlScroll
+)
+
+missionControlCanvas.bind(
+    '<Configure>',
+    ResizeMissionControlContent
+)
+
+wn.bind_all(
+    '<MouseWheel>',
+    MissionControlMouseWheel,
+    add = '+'
+)
 
 missionControlCard = tk.Frame(
-    missionControlFrame,
+    missionControlContent,
     bg = DARK,
     padx = 34,
     pady = 30,
@@ -1922,6 +2250,61 @@ scoreShowed.grid(row = 3, column = 1, sticky = 'w', pady = 7)
 
 missionGoalText.grid(row = 4, column = 0, sticky = 'w', padx = (0, 30), pady = 7)
 missionGoal.grid(row = 4, column = 1, sticky = 'w', pady = 7)
+
+# –––––– DAMAGE PAD ––––––
+
+damagePadWidth = 570
+damagePadHeight = 330
+damageCellSize = 30
+
+terminalX = 0
+terminalY = -3
+
+damageLimitX = 8
+damageLimitY = 5
+
+damagePadCard = tk.Frame(
+    missionControlContent,
+    bg = DARK,
+    padx = 24,
+    pady = 18,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+
+damagePadCard.grid(row = 1, column = 0, pady = (18, 30))
+
+damagePadTitle = tk.Label(
+    damagePadCard,
+    text = 'DAMAGE PAD',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_SECTION
+)
+
+damagePadTitle.pack(pady = (0, 10))
+
+damageCanvas = tk.Canvas(
+    damagePadCard,
+    width = damagePadWidth,
+    height = damagePadHeight,
+    bg = DARK,
+    highlightthickness = 0
+)
+
+damageCanvas.pack()
+
+damagePadStatus = tk.Label(
+    damagePadCard,
+    text = 'SYSTEM: STANDBY',
+    bg = DARK,
+    fg = TEAL,
+    font = FONT_BODY
+)
+
+damagePadStatus.pack(pady = (10, 0))
+
+DrawDamagePad()
 
 endMissionButton = PixelButton(missionControlCard, text = 'End Mission', command = EndMission, anchor = 'center')
 StyleButton(endMissionButton, TEAL, CREAM, TEAL)
@@ -2210,7 +2593,8 @@ historyList.config(
 historyList.grid(row = 0, column = 0)
 historyScroll.grid(row = 0, column = 1, sticky = 'ns')
 
-# –––––––––––––––––––––––––-
+# ––––––––––– DAMAGE PAD ––––––––––
+
 
 pages = (
     welcomeFrame,
