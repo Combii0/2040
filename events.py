@@ -1,20 +1,18 @@
 import random
 
-import main
-import missions
-
-difficulty = missions.m[main.activeCode]['Mission Difficulty']
-
 n = 1
 
-if difficulty == 'Easy':
-    n = 1
+def setDifficulty(difficulty):
+    global n
 
-if difficulty == 'Medium':
-    n = 2
+    if difficulty == 'Easy':
+        n = 1
 
-if difficulty == 'Hard':
-    n = 3
+    elif difficulty == 'Medium':
+        n = 2
+
+    elif difficulty == 'Hard':
+        n = 3
 
 possibleEvents = ['Power Failure', 'Water Contamination', 'Communication Loss', 'Transportation Emergency', 'Resource Overconsumption']
 
@@ -48,7 +46,6 @@ affectedResources = {
             4: 'Several districts are reporting unsafe water.'
         }
     },
-    
     'Communication Loss': {
         'Energy': 0,
         'Water': 0,
@@ -207,7 +204,6 @@ possibleActions = {
             'Score': 40
         }
     },
-    
     'Communication Loss': {
         0: {
             'Text': 'Switch to backup communication channels',
@@ -381,7 +377,6 @@ possibleActions = {
 def newEvent():
     global event
     global eventText
-    
     event = random.randint(0, 4)
     eventText = random.randint(0, 4)
 

@@ -7,6 +7,10 @@ from tkinter import ttk, filedialog
 
 import random
 import json
+import os
+import sys
+import ctypes
+import tkinter.font as tkfont
 
 from datetime import datetime
 
@@ -17,7 +21,318 @@ missions.loadMissions()
 wn = tk.Tk()
 
 wn.title('2040')
-wn.geometry('1080x720')
+wn.geometry('1180x760')
+wn.resizable(False, False)
+
+wn.minsize(980, 650)
+
+# –––––––––––––––––––––––––––––––––––––- VISUAL STYLE
+
+CREAM = '#DDE4DA'
+ROSE = '#8F4B4E'
+TEAL = '#466252'
+GREEN = '#6D8873'
+DARK = '#182019'
+PANEL = '#202A22'
+BUTTON = '#2A382F'
+MUTED = '#94A197'
+
+resourceFolder = os.path.join(os.path.dirname(__file__), 'Resources')
+regularFontPath = os.path.join(resourceFolder, 'pixeloid.ttf')
+boldFontPath = os.path.join(resourceFolder, 'pixeloid_bold.ttf')
+
+def RegisterMacFont(fontPath):
+    if sys.platform != 'darwin' or not os.path.exists(fontPath):
+        return False
+
+    try:
+        coreFoundation = ctypes.CDLL('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+        coreText = ctypes.CDLL('/System/Library/Frameworks/CoreText.framework/CoreText')
+
+        coreFoundation.CFURLCreateFromFileSystemRepresentation.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_char_p,
+            ctypes.c_long,
+            ctypes.c_bool
+        ]
+        coreFoundation.CFURLCreateFromFileSystemRepresentation.restype = ctypes.c_void_p
+
+        coreFoundation.CFRelease.argtypes = [ctypes.c_void_p]
+        coreFoundation.CFRelease.restype = None
+
+        coreText.CTFontManagerRegisterFontsForURL.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_uint32,
+            ctypes.POINTER(ctypes.c_void_p)
+        ]
+        coreText.CTFontManagerRegisterFontsForURL.restype = ctypes.c_bool
+
+        encodedPath = fontPath.encode('utf-8')
+
+        fontURL = coreFoundation.CFURLCreateFromFileSystemRepresentation(
+            None,
+            encodedPath,
+            len(encodedPath),
+            False
+        )
+
+        if not fontURL:
+            return False
+
+        error = ctypes.c_void_p()
+        coreText.CTFontManagerRegisterFontsForURL(fontURL, 1, ctypes.byref(error))
+        coreFoundation.CFRelease(fontURL)
+
+        return True
+
+    except Exception:
+        return False
+
+RegisterMacFont(regularFontPath)
+RegisterMacFont(boldFontPath)
+
+availableFamilies = tkfont.families(wn)
+pixeloidFamilies = [family for family in availableFamilies if 'pixeloid' in family.lower()]
+
+if pixeloidFamilies:
+    PIXEL_FONT = pixeloidFamilies[0]
+else:
+    PIXEL_FONT = 'Courier New'
+
+FONT_SMALL = (PIXEL_FONT, 9)
+FONT_BODY = (PIXEL_FONT, 11)
+FONT_BODY_BOLD = (PIXEL_FONT, 11, 'bold')
+FONT_BUTTON = (PIXEL_FONT, 10, 'bold')
+FONT_SECTION = (PIXEL_FONT, 16, 'bold')
+FONT_TITLE = (PIXEL_FONT, 24, 'bold')
+FONT_HERO = (PIXEL_FONT, 30, 'bold')
+
+wn.configure(bg = DARK)
+
+def LightenColor(color, amount = 0.14):
+    color = color.lstrip('#')
+
+    red = int(color[0:2], 16)
+    green = int(color[2:4], 16)
+    blue = int(color[4:6], 16)
+
+    red = int(red + (255 - red) * amount)
+    green = int(green + (255 - green) * amount)
+    blue = int(blue + (255 - blue) * amount)
+
+    return f'#{red:02X}{green:02X}{blue:02X}'
+
+class PixelButton(tk.Label):
+    def __init__(self, master = None, command = None, **kwargs):
+        self.command = command
+        self.buttonState = kwargs.pop('state', 'normal')
+
+        super().__init__(master, **kwargs)
+
+        self.config(takefocus = True)
+
+        self.bind('<Button-1>', self.InvokeCommand)
+        self.bind('<Return>', self.InvokeCommand)
+        self.bind('<space>', self.InvokeCommand)
+
+    def InvokeCommand(self, event = None):
+        if self.buttonState == 'disabled':
+            return
+
+        if callable(self.command):
+            self.command()
+
+    def config(self, cnf = None, **kwargs):
+        if cnf:
+            kwargs.update(cnf)
+
+        if 'command' in kwargs:
+            self.command = kwargs.pop('command')
+
+        if 'state' in kwargs:
+            self.buttonState = kwargs.pop('state')
+
+            if self.buttonState == 'disabled':
+                kwargs.setdefault('cursor', 'arrow')
+
+            else:
+                kwargs.setdefault('cursor', 'hand2')
+
+        return tk.Label.config(self, **kwargs)
+
+    configure = config
+
+def StyleButton(widget, background = BUTTON, foreground = CREAM, border = TEAL):
+    if background == DARK:
+        background = BUTTON
+
+    hoverBackground = LightenColor(background)
+    hoverForeground = foreground
+
+    widget.config(
+        font = FONT_BUTTON,
+        bg = background,
+        fg = foreground,
+        relief = 'flat',
+        bd = 0,
+        highlightthickness = 2,
+        highlightbackground = border,
+        highlightcolor = hoverBackground,
+        cursor = 'hand2',
+        padx = 14,
+        pady = 9
+    )
+
+    def HoverIn(event):
+        if getattr(widget, 'buttonState', 'normal') != 'disabled':
+            widget.config(bg = hoverBackground, fg = hoverForeground)
+
+    def HoverOut(event):
+        if getattr(widget, 'buttonState', 'normal') != 'disabled':
+            widget.config(bg = background, fg = foreground)
+
+    widget.bind('<Enter>', HoverIn)
+    widget.bind('<Leave>', HoverOut)
+
+def StyleEntry(widget):
+    widget.config(
+        font = FONT_BODY,
+        bg = DARK,
+        fg = CREAM,
+        insertbackground = CREAM,
+        relief = 'flat',
+        bd = 0,
+        highlightthickness = 2,
+        highlightbackground = TEAL,
+        highlightcolor = GREEN
+    )
+
+def StyleCard(widget):
+    widget.config(
+        bg = DARK,
+        highlightbackground = TEAL,
+        highlightcolor = GREEN,
+        highlightthickness = 2,
+        bd = 0
+    )
+
+def ApplyPopupTheme(window):
+    window.configure(bg = DARK)
+
+    def ApplyToChildren(parent):
+        for child in parent.winfo_children():
+            if isinstance(child, tk.Frame):
+                child.config(bg = DARK)
+
+            elif isinstance(child, PixelButton):
+                buttonText = str(child.cget('text')).lower()
+
+                if 'failed' in buttonText or 'exit' in buttonText:
+                    StyleButton(child, ROSE, CREAM, ROSE)
+                else:
+                    StyleButton(child, BUTTON, CREAM, TEAL)
+
+            elif isinstance(child, tk.Label):
+                labelText = str(child.cget('text'))
+
+                if 'failed' in labelText.lower() or 'mission failed' in labelText.lower():
+                    child.config(bg = DARK, fg = ROSE, font = FONT_SECTION if len(labelText) < 45 else FONT_BODY)
+                elif labelText in events.possibleEvents or 'emergency' in labelText.lower():
+                    child.config(bg = DARK, fg = GREEN, font = FONT_SECTION if len(labelText) < 45 else FONT_BODY)
+                elif 'victorious' in labelText.lower() or 'completed' in labelText.lower():
+                    child.config(bg = DARK, fg = GREEN, font = FONT_SECTION if len(labelText) < 45 else FONT_BODY)
+                elif labelText.isupper() and len(labelText) < 45:
+                    child.config(bg = DARK, fg = CREAM, font = FONT_SECTION)
+                else:
+                    child.config(bg = DARK, fg = CREAM, font = FONT_BODY)
+
+            elif isinstance(child, tk.Listbox):
+                child.config(
+                    bg = DARK,
+                    fg = CREAM,
+                    selectbackground = TEAL,
+                    selectforeground = CREAM,
+                    font = FONT_BODY,
+                    relief = 'flat',
+                    highlightbackground = TEAL,
+                    highlightcolor = GREEN,
+                    highlightthickness = 2,
+                    bd = 0
+                )
+
+            ApplyToChildren(child)
+
+    ApplyToChildren(window)
+
+def MissionStateColor(state):
+    state = str(state).lower()
+
+    if state == 'failed':
+        return ROSE
+
+    if state in ['completed', 'resolved']:
+        return GREEN
+
+    if state in ['critical', 'alert']:
+        return LightenColor(TEAL, 0.24)
+
+    if state in ['operating', 'initializing', 'creating mission']:
+        return TEAL
+
+    return CREAM
+
+def ResourceColor(resourceName, value):
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return CREAM
+
+    alertLimits = {
+        'Energy': 40,
+        'Water': 30,
+        'Food': 25,
+        'Communication': 35
+    }
+
+    if value <= alertLimits[resourceName]:
+        return LightenColor(TEAL, 0.24)
+
+    return GREEN
+
+def UpdateStateColors():
+    if activeCode is None or activeCode not in missions.m:
+        missionstate.config(fg = CREAM)
+        return
+
+    state = missions.m[activeCode]['Mission State']
+    stateColor = MissionStateColor(state)
+
+    missionstate.config(fg = stateColor)
+    missionState.config(fg = stateColor)
+    missionStats.config(fg = stateColor)
+
+def UpdateResourceColors(resourceData = None):
+    if resourceData is None:
+        if activeCode is None or activeCode not in resources.resources:
+            return
+        resourceData = resources.resources[activeCode]
+
+    resourceWidgets = {
+        'Energy': (energyValue, energyStats, finalEnergyValue),
+        'Water': (waterValue, waterStats, finalWaterValue),
+        'Food': (foodValue, foodStats, finalFoodValue),
+        'Communication': (communicationValue, communicationStats, finalCommunicationValue)
+    }
+
+    for resourceName, widgets in resourceWidgets.items():
+        if resourceName not in resourceData:
+            continue
+
+        color = ResourceColor(resourceName, resourceData[resourceName])
+
+        for widget in widgets:
+            widget.config(fg = color)
+
 
 # –––––––––––––––––––––––––––––––––––––- VAR UTILITIES
 
@@ -31,25 +346,69 @@ finalRank = 'B'
 
 historyCodes = []
 
+correctDecisions = 0
+incorrectDecisions = 0
+
+loginAttempts = 0
+maxLoginAttempts = 3
+
+currentUser = None
+sessionActions = []
+
+operatorFile = os.path.join(os.path.dirname(__file__), 'operators.json')
+
+try:
+    with open(operatorFile, 'r', encoding = 'utf-8') as file:
+        createdOperators = json.load(file)
+
+except FileNotFoundError:
+    createdOperators = {}
+
 # ––––––––––––––––––––––––––––––––––––––––––––––––––––
 
 panel = tk.Frame(wn)
-panel.pack()
+panel.pack(expand = True)
 
 phrase = tk.Label(panel, text = 'RoboYork 2040')
 initiatePhrase = tk.Label(panel, text = 'Not account recognized...')
 user = tk.Entry(panel)
 password = tk.Entry(panel, show = '*')
 
+operatorPanel = tk.Frame(wn)
+
+operatorPhrase = tk.Label(operatorPanel, text = 'CREATE OPERATOR')
+newOperatorUser = tk.Entry(operatorPanel)
+newOperatorPassword = tk.Entry(operatorPanel, show = '*')
+confirmOperatorPassword = tk.Entry(operatorPanel, show = '*')
+operatorStatus = tk.Label(operatorPanel, text = '')
+
 # –––––––––––––––––––––––––––––––––––––––––- FUNCTION UTILITIES
 
 def initiateLogin():
+    global loginAttempts
+    global currentUser
+    global sessionActions
+
     u = user.get().strip()
     p = password.get()
 
-    if users.recognizeUser(u, p):
+    if not u or not p:
+        initiatePhrase.config(text = 'Missing credentials.', fg = ROSE)
+        return
+
+    recognized = users.recognizeUser(u, p) or createdOperators.get(u) == p
+
+    if recognized:
+        loginAttempts = 0
+        currentUser = u
+        sessionActions = [f'Operator logged in: {u}']
+
         panel.pack_forget()
+        operatorPanel.pack_forget()
         dashboard.pack(fill = 'both', expand = True)
+        dashboard.lift()
+        wn.update_idletasks()
+        wn.update()
 
         ShowFrame(welcomeFrame)
 
@@ -58,19 +417,98 @@ def initiateLogin():
 
         if activeCode is None:
             ShowPreMissionMenu()
+
+        elif missions.m[activeCode].get('Mission Ended', missions.m[activeCode]['Mission State'] in ['Resolved', 'Completed', 'Failed']):
+            RegisterAction(f'Operator logged in: {u}')
+            ShowEndMissionMenu()
+
         else:
+            RegisterAction(f'Operator logged in: {u}')
             ShowMissionMenu()
 
         password.delete(0, tk.END)
         user.delete(0, tk.END)
+        initiatePhrase.config(text = 'Access granted.', fg = GREEN)
 
     else:
+        loginAttempts += 1
         password.delete(0, tk.END)
-        initiatePhrase.config(text = 'Invalid Credentials.')
+
+        if loginAttempts >= maxLoginAttempts:
+            initiatePhrase.config(text = 'Too many failed attempts. Try again in 5 seconds.', fg = ROSE)
+            button.config(state = 'disabled')
+            wn.after(5000, ResetLoginAttempts)
+
+        else:
+            initiatePhrase.config(text = f'Invalid Credentials. Attempt {loginAttempts}/{maxLoginAttempts}.', fg = ROSE)
+
+
+def ResetLoginAttempts():
+    global loginAttempts
+
+    loginAttempts = 0
+    button.config(state = 'normal')
+    initiatePhrase.config(text = 'You can try again.', fg = TEAL)
+
+def OpenCreateOperator():
+    panel.pack_forget()
+    operatorPanel.pack(expand = True)
+    operatorPanel.lift()
+    wn.update_idletasks()
+    wn.update()
+
+def SaveOperator():
+    newUser = newOperatorUser.get().strip()
+    newPassword = newOperatorPassword.get()
+    confirmPassword = confirmOperatorPassword.get()
+
+    if not newUser or not newPassword or not confirmPassword:
+        operatorStatus.config(text = 'Missing information.', fg = ROSE)
+        return
+
+    if len(newPassword) < 4:
+        operatorStatus.config(text = 'Password must contain at least 4 characters.', fg = ROSE)
+        return
+
+    if newPassword != confirmPassword:
+        operatorStatus.config(text = 'Passwords do not match.', fg = ROSE)
+        return
+
+    if newUser in createdOperators:
+        operatorStatus.config(text = 'Operator already exists.', fg = ROSE)
+        return
+
+    createdOperators[newUser] = newPassword
+
+    with open(operatorFile, 'w', encoding = 'utf-8') as file:
+        json.dump(createdOperators, file, indent = 4, ensure_ascii = False)
+
+    newOperatorUser.delete(0, tk.END)
+    newOperatorPassword.delete(0, tk.END)
+    confirmOperatorPassword.delete(0, tk.END)
+
+    operatorStatus.config(text = '')
+    initiatePhrase.config(text = 'Operator created successfully. Please log in.', fg = GREEN)
+    BackToLogin()
+
+def BackToLogin():
+    operatorPanel.pack_forget()
+    dashboard.pack_forget()
+    panel.pack(expand = True)
+    panel.lift()
+    wn.update_idletasks()
+    wn.update()
+    user.focus_set()
 
 def LogOut():
-    dashboard.pack_forget()
-    panel.pack()
+    global currentUser
+
+    if activeCode is not None and currentUser is not None:
+        RegisterAction(f'Operator logged out: {currentUser}')
+
+    currentUser = None
+
+    BackToLogin()
 
 def ShowFrame(frame):
     frame.tkraise()
@@ -128,17 +566,35 @@ def ShowPreMissionMenu():
 def ShowMissionMenu():
     HideMenuButtons()
 
-    createMission.grid(row = 0, sticky = 'ew')
-    resourcesButton.grid(row = 1, sticky = 'ew')
-    processEvent.grid(row = 2, sticky = 'ew')
-    simulation.grid(row = 3, sticky = 'ew')
-    statistics.grid(row = 4, sticky = 'ew')
-    history.grid(row = 5, sticky = 'ew')
+    row = 0
+
+    createMission.grid(row = row, sticky = 'ew')
+    row += 1
+
+    resourcesButton.grid(row = row, sticky = 'ew')
+    row += 1
+
+    processEvent.grid(row = row, sticky = 'ew')
+    row += 1
+
+    if activeCode is not None:
+        mission = missions.m[activeCode]
+
+        if not mission.get('Manual Event Processed', False) and not mission.get('Simulation Used', False) and not mission.get('Victory Achieved', False):
+            simulation.grid(row = row, sticky = 'ew')
+            row += 1
+
+    statistics.grid(row = row, sticky = 'ew')
+    row += 1
+
+    history.grid(row = row, sticky = 'ew')
+    row += 1
 
     generateReport.config(text = 'Generate Report')
-    generateReport.grid(row = 6, sticky = 'ew')
+    generateReport.grid(row = row, sticky = 'ew')
+    row += 1
 
-    backupButton.grid(row = 7, sticky = 'ew')
+    backupButton.grid(row = row, sticky = 'ew')
 
     logOut.grid(row = 10, sticky = 'ew')
 
@@ -158,7 +614,7 @@ def ShowEndMissionMenu():
 
 def CreateMission():
     ShowFrame(createMissionFrame)
-    missionstate.config(text = 'Mission State: Creating Mission')
+    missionstate.config(text = 'Mission State: Creating Mission', fg = TEAL)
 
 def SaveMission():
     name = missionName.get().strip()
@@ -171,7 +627,13 @@ def SaveMission():
         'Mission Code': code,
         'Mission Difficulty': difficulty.get(),
         'Mission State': 'Initializing',
-        'History': []
+        'History': sessionActions.copy(),
+        'Correct Decisions': 0,
+        'Incorrect Decisions': 0,
+        'Victory Achieved': False,
+        'Mission Ended': False,
+        'Manual Event Processed': False,
+        'Simulation Used': False
     }
 
     while code in missions.m:
@@ -183,6 +645,9 @@ def SaveMission():
         activeCode = code
 
         RegisterAction('Mission created')
+
+        missionCreationStatus.config(text = '')
+        missionName.delete(0, tk.END)
 
         ShowFrame(missionOverviewFrame)
 
@@ -196,35 +661,53 @@ def SaveMission():
         missionName.delete(0, tk.END)
 
 def OpenMissionControlTab():
-    missionControlName.config(text = f'Mission: {missions.m[activeCode]["Mission Name"]}')
-    missionState.config(text = f'State: {missions.m[activeCode]["Mission State"]}')
-    eventsProcessed.config(text = f'Events: {eventsAttended}')
-    scoreShowed.config(text = f'Score: {SCORE}')
+    missionControlName.config(text = missions.m[activeCode]['Mission Name'])
+    missionState.config(text = missions.m[activeCode]['Mission State'])
+    eventsProcessed.config(text = eventsAttended)
+    scoreShowed.config(text = SCORE)
+    missionGoal.config(text = f'Victory Goal: more than {VictoryLimit()} events')
 
+    UpdateEndMissionButton()
     ShowFrame(missionControlFrame)
 
 def StartMission():
+    global correctDecisions
+    global incorrectDecisions
+
     ShowFrame(missionControlFrame)
 
+    correctDecisions = 0
+    incorrectDecisions = 0
+
+    missions.m[activeCode]['Correct Decisions'] = 0
+    missions.m[activeCode]['Incorrect Decisions'] = 0
+    missions.m[activeCode]['Victory Achieved'] = False
+    missions.m[activeCode]['Mission Ended'] = False
+    missions.m[activeCode]['Manual Event Processed'] = False
+    missions.m[activeCode]['Simulation Used'] = False
     missions.m[activeCode]['Mission State'] = 'Operating'
 
     missionstate.config(text = f'Mission State: {missions.m[activeCode]["Mission State"]}')
 
+    events.setDifficulty(missions.m[activeCode]['Mission Difficulty'])
     resources.createResources(activeCode)
 
     RegisterAction('Mission started')
 
     createMission.config(text = 'Mission Control', command = OpenMissionControlTab)
 
-    missionControlName.config(text = f'Mission: {missions.m[activeCode]["Mission Name"]}')
-    missionState.config(text = f'State: {missions.m[activeCode]["Mission State"]}')
+    missionControlName.config(text = missions.m[activeCode]['Mission Name'])
+    missionState.config(text = missions.m[activeCode]['Mission State'])
+    UpdateStateColors()
 
-    eventsProcessed.config(text = f'Events: {eventsAttended}')
+    eventsProcessed.config(text = eventsAttended)
     eventsStats.config(text = eventsAttended)
 
-    scoreShowed.config(text = f'Score: {SCORE}')
+    scoreShowed.config(text = SCORE)
     scoreStats.config(text = SCORE)
+    missionGoal.config(text = f'Victory Goal: more than {VictoryLimit()} events')
 
+    UpdateEndMissionButton()
     ShowMissionMenu()
 
 def ShowResources():
@@ -239,59 +722,335 @@ def ShowResources():
     foodValue.config(text = resources.resources[activeCode]['Food'])
     communicationValue.config(text = resources.resources[activeCode]['Communication'])
 
+    UpdateResourceColors()
     ShowFrame(resourcesFrame)
 
 def ShowFinalReport():
     if activeCode is None:
         return
 
-    finalEnergyValue.config(text = resources.resources[activeCode]['Energy'])
-    finalWaterValue.config(text = resources.resources[activeCode]['Water'])
-    finalFoodValue.config(text = resources.resources[activeCode]['Food'])
-    finalCommunicationValue.config(text = resources.resources[activeCode]['Communication'])
+    mission = missions.m[activeCode]
+    finalResources = mission.get('Final Resources', resources.resources.get(activeCode, {}))
+    finalScore = mission.get('Final Score', SCORE)
 
-    finalScoreLabel.config(text = f'Score: {SCORE}')
+    finalEnergyValue.config(text = finalResources.get('Energy', 'N/A'))
+    finalWaterValue.config(text = finalResources.get('Water', 'N/A'))
+    finalFoodValue.config(text = finalResources.get('Food', 'N/A'))
+    finalCommunicationValue.config(text = finalResources.get('Communication', 'N/A'))
+
+    finalScoreLabel.config(text = f'Score: {finalScore}')
+    finalResultLabel.config(text = f'MISSION {mission["Mission State"].upper()}', fg = MissionStateColor(mission['Mission State']))
+    UpdateResourceColors(finalResources)
+
+    if mission['Mission State'] == 'Failed':
+        finalRankDetected.pack_forget()
+
+        failureReasonLabel.config(text = f'Reason: {mission.get("Failure Reason", "Unknown")}')
+        failureEventLabel.config(text = f'Final Event: {mission.get("Failure Event", "Unknown")}')
+
+        if not failureReasonLabel.winfo_ismapped():
+            failureReasonLabel.pack(after = finalScoreLabel)
+
+        if not failureEventLabel.winfo_ismapped():
+            failureEventLabel.pack(after = failureReasonLabel)
+
+    else:
+        failureReasonLabel.pack_forget()
+        failureEventLabel.pack_forget()
+
+        finalRankDetected.config(text = f'Rank: {mission.get("Final Rank", determineRank())}', fg = GREEN)
+
+        if not finalRankDetected.winfo_ismapped():
+            finalRankDetected.pack(after = finalScoreLabel)
+
+        if mission.get('Completion Reason'):
+            failureReasonLabel.config(text = f'End Reason: {mission["Completion Reason"]}')
+            failureEventLabel.config(text = f'Final Event: {mission.get("Completion Event", "Unknown")}')
+
+            failureReasonLabel.pack(after = finalRankDetected)
+            failureEventLabel.pack(after = failureReasonLabel)
 
     ShowFrame(finalDataCollected)
 
-def EndMission():
-    finalEnergyValue.config(text = resources.resources[activeCode]['Energy'])
-    finalWaterValue.config(text = resources.resources[activeCode]['Water'])
-    finalFoodValue.config(text = resources.resources[activeCode]['Food'])
-    finalCommunicationValue.config(text = resources.resources[activeCode]['Communication'])
 
-    finalScoreLabel.config(text = f'Score: {SCORE}')
+def SaveFinalMissionData():
+    missions.m[activeCode]['Final Score'] = SCORE
+    missions.m[activeCode]['Events Processed'] = eventsAttended
+    missions.m[activeCode]['Correct Decisions'] = correctDecisions
+    missions.m[activeCode]['Incorrect Decisions'] = incorrectDecisions
+    missions.m[activeCode]['Final Resources'] = resources.resources[activeCode].copy()
 
-    missions.m[activeCode]['Mission State'] = 'Finished'
+    if missions.m[activeCode]['Mission State'] != 'Failed':
+        missions.m[activeCode]['Final Rank'] = determineRank()
 
-    RegisterAction('Mission finished')
+    missions.saveMissions()
 
-    missionstate.config(text = 'Mission State: Finished')
+def FailMission(resourceName, lastEvent):
+    if missions.m[activeCode].get('Victory Achieved', False):
+        missions.m[activeCode]['Mission State'] = 'Completed'
+        missions.m[activeCode]['Mission Ended'] = True
+        missions.m[activeCode]['Completion Reason'] = f'Infinite mode ended because {resourceName} reached 0.'
+        missions.m[activeCode]['Completion Event'] = lastEvent if lastEvent else 'Unknown'
+
+        RegisterAction(f'Infinite mode ended: {resourceName} reached 0.')
+        RegisterAction(f'Final event: {missions.m[activeCode]["Completion Event"]}')
+
+        SaveFinalMissionData()
+
+        missionstate.config(text = 'Mission State: Completed')
+        missionState.config(text = 'Completed')
+        UpdateStateColors()
+
+        UpdateEndMissionButton()
+        ShowEndMissionMenu()
+        ShowFinalReport()
+        return
+
+    missions.m[activeCode]['Mission State'] = 'Failed'
+    missions.m[activeCode]['Mission Ended'] = True
+    missions.m[activeCode]['Failure Reason'] = f'{resourceName} reached 0.'
+    missions.m[activeCode]['Failure Event'] = lastEvent if lastEvent else 'Unknown'
+
+    RegisterAction(f'Mission failed: {resourceName} reached 0.')
+    RegisterAction(f'Failure event: {missions.m[activeCode]["Failure Event"]}')
+
+    SaveFinalMissionData()
+
+    missionstate.config(text = 'Mission State: Failed')
+    missionState.config(text = 'Failed')
+    UpdateStateColors()
 
     ShowEndMissionMenu()
-    ShowFrame(finalDataCollected)
+    ShowFinalReport()
+
+def UpdateMissionState(lastEvent = None):
+    if activeCode is None:
+        return None
+
+    if activeCode not in resources.resources:
+        return None
+
+    x = resources.resources[activeCode]
+
+    failedResource = None
+
+    for resourceName in ['Energy', 'Water', 'Food', 'Communication']:
+        if x[resourceName] <= 0:
+            failedResource = resourceName
+            break
+
+    if failedResource is not None:
+        victoryAlreadyAchieved = missions.m[activeCode].get('Victory Achieved', False)
+        FailMission(failedResource, lastEvent)
+
+        if victoryAlreadyAchieved:
+            return 'Completed'
+
+        return 'Failed'
+
+    if missions.m[activeCode].get('Victory Achieved', False):
+        newState = 'Completed'
+
+    elif x['Energy'] <= 20 or x['Water'] <= 15 or x['Food'] <= 15 or x['Communication'] <= 20:
+        newState = 'Critical'
+
+    elif x['Energy'] <= 40 or x['Water'] <= 30 or x['Food'] <= 25 or x['Communication'] <= 35:
+        newState = 'Alert'
+
+    else:
+        newState = 'Operating'
+
+    oldState = missions.m[activeCode]['Mission State']
+    missions.m[activeCode]['Mission State'] = newState
+
+    if oldState != newState:
+        RegisterAction(f'Mission state changed: {oldState} → {newState}')
+
+    missionState.config(text = newState)
+    missionstate.config(text = f'Mission State: {newState}')
+    UpdateStateColors()
+
+    missions.saveMissions()
+
+    return newState
+
+def RegisterDecision(option):
+    global correctDecisions
+    global incorrectDecisions
+
+    decisionScore = events.possibleActions[missionType][option]['Score']
+
+    if decisionScore >= 70:
+        correctDecisions += 1
+        decisionResult = 'Correct'
+
+    else:
+        incorrectDecisions += 1
+        decisionResult = 'Incorrect'
+
+    missions.m[activeCode]['Correct Decisions'] = correctDecisions
+    missions.m[activeCode]['Incorrect Decisions'] = incorrectDecisions
+
+    RegisterAction(f'Decision result: {decisionResult}')
+
+def VictoryLimit():
+    if activeCode is None:
+        return 0
+
+    difficultyLevel = missions.m[activeCode]['Mission Difficulty']
+
+    if difficultyLevel == 'Easy':
+        return 10
+
+    if difficultyLevel == 'Medium':
+        return 15
+
+    return 20
+
+def UpdateEndMissionButton():
+    if activeCode is None:
+        endMissionButton.grid_remove()
+        return
+
+    mission = missions.m[activeCode]
+
+    if mission.get('Victory Achieved', False) and not mission.get('Mission Ended', False):
+        endMissionButton.grid(row = 2, column = 0, columnspan = 2, pady = (14, 0))
+
+    else:
+        endMissionButton.grid_remove()
+
+def ShowVictoryPopup():
+    victoryWindow = tk.Toplevel(wn)
+
+    victoryWindow.title('MISSION VICTORIOUS')
+    victoryWindow.geometry('420x230')
+    victoryWindow.resizable(False, False)
+    victoryWindow.transient(wn)
+    victoryWindow.grab_set()
+    victoryWindow.protocol('WM_DELETE_WINDOW', lambda: None)
+
+    tk.Label(victoryWindow, text = 'MISSION VICTORIOUS').pack(pady = (25, 8))
+    tk.Label(victoryWindow, text = f'You survived {eventsAttended} events.').pack(pady = 4)
+    tk.Label(victoryWindow, text = 'End the mission now or continue indefinitely.').pack(pady = 4)
+
+    victoryButtons = tk.Frame(victoryWindow)
+    victoryButtons.pack(pady = 18)
+
+    PixelButton(victoryButtons, text = 'End Mission', command = lambda: CompleteVictory(victoryWindow)).grid(row = 0, column = 0, padx = 8)
+    PixelButton(victoryButtons, text = 'Continue Indefinitely', command = lambda: ContinueIndefinitely(victoryWindow)).grid(row = 0, column = 1, padx = 8)
+
+    ApplyPopupTheme(victoryWindow)
+
+def CompleteVictory(victoryWindow = None):
+    if victoryWindow is not None:
+        victoryWindow.grab_release()
+        victoryWindow.destroy()
+
+    EndMission()
+
+def ContinueIndefinitely(victoryWindow):
+    victoryWindow.grab_release()
+    victoryWindow.destroy()
+
+    RegisterAction('Mission continued indefinitely after victory')
+
+    ShowMissionMenu()
+    OpenMissionControlTab()
+
+def CheckMissionVictory():
+    if activeCode is None:
+        return False
+
+    mission = missions.m[activeCode]
+
+    if mission.get('Mission Ended', False) or mission.get('Victory Achieved', False):
+        return False
+
+    if eventsAttended > VictoryLimit():
+        mission['Victory Achieved'] = True
+        mission['Mission State'] = 'Completed'
+
+        RegisterAction(f'Victory condition reached after {eventsAttended} events')
+
+        missionState.config(text = 'Completed')
+        missionstate.config(text = 'Mission State: Completed')
+        missionGoal.config(text = 'Victory Achieved - Continue or End Mission', fg = GREEN)
+        UpdateStateColors()
+
+        UpdateEndMissionButton()
+        ShowMissionMenu()
+        missions.saveMissions()
+
+        ShowVictoryPopup()
+        return True
+
+    return False
+
+def EndMission():
+    if activeCode is None:
+        return
+
+    if activeCode not in resources.resources:
+        return
+
+    mission = missions.m[activeCode]
+
+    if not mission.get('Victory Achieved', False):
+        return
+
+    failedState = UpdateMissionState()
+
+    if failedState == 'Failed':
+        return
+
+    mission['Mission State'] = 'Completed'
+    mission['Mission Ended'] = True
+
+    RegisterAction('Mission completed')
+
+    SaveFinalMissionData()
+
+    finalRankDetected.config(text = f'Rank: {determineRank()}')
+    missionstate.config(text = 'Mission State: Completed')
+    missionState.config(text = 'Completed')
+    UpdateStateColors()
+
+    UpdateEndMissionButton()
+    ShowEndMissionMenu()
+    ShowFinalReport()
 
 def RestartSession():
     global activeCode
     global SCORE
     global eventsAttended
+    global correctDecisions
+    global incorrectDecisions
 
     eventsAttended = 0
     SCORE = 0
+    correctDecisions = 0
+    incorrectDecisions = 0
 
-    eventsProcessed.config(text = f'Events: {eventsAttended}')
+    eventsProcessed.config(text = eventsAttended)
     eventsStats.config(text = eventsAttended)
 
-    scoreShowed.config(text = f'Score: {SCORE}')
+    scoreShowed.config(text = SCORE)
     scoreStats.config(text = SCORE)
+
+    correctStats.config(text = correctDecisions)
+    incorrectStats.config(text = incorrectDecisions)
 
     createMission.config(text = 'Create Mission', command = CreateMission)
     generateReport.config(text = 'Generate Report')
 
-    missionstate.config(text = 'Mission State: No mission')
+    missionstate.config(text = 'Mission State: No mission', fg = CREAM)
+    missionState.config(fg = CREAM)
+    missionGoal.config(fg = CREAM)
 
     activeCode = None
 
+    UpdateEndMissionButton()
     ShowPreMissionMenu()
     ShowFrame(welcomeFrame)
 
@@ -299,9 +1058,25 @@ def Stats():
     if activeCode is None:
         return
 
-    scoreStats.config(text = SCORE)
-    eventsStats.config(text = eventsAttended)
-    missionStats.config(text = missions.m[activeCode]['Mission State'])
+    mission = missions.m[activeCode]
+
+    scoreStats.config(text = mission.get('Final Score', SCORE))
+    eventsStats.config(text = mission.get('Events Processed', eventsAttended))
+    correctStats.config(text = mission.get('Correct Decisions', correctDecisions))
+    incorrectStats.config(text = mission.get('Incorrect Decisions', incorrectDecisions))
+    missionStats.config(text = mission['Mission State'])
+
+    statsResources = mission.get('Final Resources', resources.resources.get(activeCode, {}))
+
+    energyStats.config(text = statsResources.get('Energy', 'N/A'))
+    waterStats.config(text = statsResources.get('Water', 'N/A'))
+    foodStats.config(text = statsResources.get('Food', 'N/A'))
+    communicationStats.config(text = statsResources.get('Communication', 'N/A'))
+
+    missionStats.config(fg = MissionStateColor(mission['Mission State']))
+    UpdateResourceColors(statsResources)
+    incorrectStats.config(fg = CREAM)
+    correctStats.config(fg = GREEN if mission.get('Correct Decisions', correctDecisions) > 0 else CREAM)
 
     ShowFrame(statisticsFrame)
 
@@ -343,6 +1118,19 @@ def LoadHistory(event):
 def ShowEventPopup():
     global eventsAttended
 
+    if activeCode is None:
+        return
+
+    if activeCode not in resources.resources:
+        return
+
+    if missions.m[activeCode].get('Mission Ended', False) or missions.m[activeCode]['Mission State'] == 'Failed':
+        return
+
+    missions.m[activeCode]['Manual Event Processed'] = True
+    missions.saveMissions()
+    simulation.grid_remove()
+
     events.newEvent()
 
     global missionType
@@ -353,10 +1141,6 @@ def ShowEventPopup():
     eventsAttended += 1
 
     missionType = events.possibleEvents[events.event]
-    missions.m[activeCode]['Mission State'] = missionType
-
-    missionState.config(text = f'State: {missions.m[activeCode]["Mission State"]}')
-    missionstate.config(text = f'Mission State: {missions.m[activeCode]["Mission State"]}')
 
     RegisterAction(f'Event detected: {missionType}')
 
@@ -370,14 +1154,20 @@ def ShowEventPopup():
 
     eventWindow.title('EMERGENCY EVENT')
     eventWindow.geometry('400x300')
+    eventWindow.resizable(False, False)
+    eventWindow.transient(wn)
+    eventWindow.grab_set()
+    eventWindow.protocol('WM_DELETE_WINDOW', lambda: None)
 
     tk.Label(eventWindow, text = events.possibleEvents[events.event]).pack(pady = 20)
     tk.Label(eventWindow, text = events.affectedResources[missionType]['Text'][events.eventText]).pack(pady = 10)
 
-    tk.Button(eventWindow, text = events.possibleActions[missionType][optionA]['Text'], command = lambda: ClosePopUp(optionA, eventWindow)).pack(pady = 0, padx = 5)
-    tk.Button(eventWindow, text = events.possibleActions[missionType][optionB]['Text'], command = lambda: ClosePopUp(optionB, eventWindow)).pack(pady = 0, padx = 20)
+    PixelButton(eventWindow, text = events.possibleActions[missionType][optionA]['Text'], command = lambda: ClosePopUp(optionA, eventWindow)).pack(pady = 0, padx = 5)
+    PixelButton(eventWindow, text = events.possibleActions[missionType][optionB]['Text'], command = lambda: ClosePopUp(optionB, eventWindow)).pack(pady = 6, padx = 20)
 
-    eventsProcessed.config(text = f'Events: {eventsAttended}')
+    ApplyPopupTheme(eventWindow)
+
+    eventsProcessed.config(text = eventsAttended)
     eventsStats.config(text = eventsAttended)
 
 def NoImpossibleValuesInMyHouseBro():
@@ -411,39 +1201,43 @@ def DamageResources(option):
     x['Food'] -= events.affectedResources[missionType]['Food']
     x['Communication'] -= events.affectedResources[missionType]['Communication']
 
-    x['Energy'] += events.possibleActions[missionType][option]['Energy']
-    x['Water'] += events.possibleActions[missionType][option]['Water']
-    x['Food'] += events.possibleActions[missionType][option]['Food']
-    x['Communication'] += events.possibleActions[missionType][option]['Communication']
+    x['Energy'] += events.possibleActions[missionType][option]['Energy'] * events.n
+    x['Water'] += events.possibleActions[missionType][option]['Water'] * events.n
+    x['Food'] += events.possibleActions[missionType][option]['Food'] * events.n
+    x['Communication'] += events.possibleActions[missionType][option]['Communication'] * events.n
 
     SCORE += events.possibleActions[missionType][option]['Score']
 
 def ClosePopUp(option, eventWindow):
-    missions.m[activeCode]['Mission State'] = 'Operating'
-
     DamageResources(option)
     NoImpossibleValuesInMyHouseBro()
 
     selectedAction = events.possibleActions[missionType][option]['Text']
 
     RegisterAction(f'Action selected: {selectedAction}')
+    RegisterDecision(option)
 
     RegisterAction(
         f'Energy: {resources.resources[activeCode]["Energy"]} | Water: {resources.resources[activeCode]["Water"]} | Food: {resources.resources[activeCode]["Food"]} | Communication: {resources.resources[activeCode]["Communication"]} | Score: {SCORE}'
     )
 
+    eventWindow.grab_release()
     eventWindow.destroy()
 
-    missionState.config(text = f'State: {missions.m[activeCode]["Mission State"]}')
-    missionstate.config(text = f'Mission State: {missions.m[activeCode]["Mission State"]}')
-
-    eventsProcessed.config(text = f'Events: {eventsAttended}')
+    eventsProcessed.config(text = eventsAttended)
     eventsStats.config(text = eventsAttended)
 
-    scoreShowed.config(text = f'Score: {SCORE}')
+    scoreShowed.config(text = SCORE)
     scoreStats.config(text = SCORE)
 
+    currentState = UpdateMissionState(missionType)
+    UpdateResourceColors()
+
+    if currentState == 'Failed':
+        return
+
     ShowResources()
+    CheckMissionVictory()
 
 def GenerateReport():
     if activeCode is None:
@@ -464,17 +1258,38 @@ def GenerateReport():
     report += 'STATISTICS\n'
     report += '–––––––––––––––––––––––––––––––\n'
 
-    report += f'Score: {mission["Final Score"]}\n'
-    report += f'Events Processed: {mission["Events Processed"]}\n\n'
-    report += f'Rank: {determineRank()}'
+    reportScore = mission.get('Final Score', SCORE)
+    reportEvents = mission.get('Events Processed', eventsAttended)
+    reportResources = mission.get('Final Resources', resources.resources.get(activeCode, {}))
+    reportCorrect = mission.get('Correct Decisions', correctDecisions)
+    reportIncorrect = mission.get('Incorrect Decisions', incorrectDecisions)
+
+    report += f'Score: {reportScore}\n'
+    report += f'Events Processed: {reportEvents}\n'
+    report += f'Correct Decisions: {reportCorrect}\n'
+    report += f'Incorrect Decisions: {reportIncorrect}\n\n'
+
+    if mission['Mission State'] == 'Failed':
+        report += 'MISSION FAILED\n'
+        report += f'Reason: {mission.get("Failure Reason", "Unknown")}\n'
+        report += f'Final Event: {mission.get("Failure Event", "Unknown")}\n\n'
+
+    else:
+        report += f'Rank: {mission.get("Final Rank", determineRank())}\n'
+
+        if mission.get('Completion Reason'):
+            report += f'End Reason: {mission["Completion Reason"]}\n'
+            report += f'Final Event: {mission.get("Completion Event", "Unknown")}\n'
+
+        report += '\n'
 
     report += 'FINAL RESOURCES\n'
     report += '–––––––––––––––––––––––––––––––\n'
 
-    report += f'Energy: {mission["Final Resources"]["Energy"]}\n'
-    report += f'Water: {mission["Final Resources"]["Water"]}\n'
-    report += f'Food: {mission["Final Resources"]["Food"]}\n'
-    report += f'Communication: {mission["Final Resources"]["Communication"]}\n\n'
+    report += f'Energy: {reportResources.get("Energy", "N/A")}\n'
+    report += f'Water: {reportResources.get("Water", "N/A")}\n'
+    report += f'Food: {reportResources.get("Food", "N/A")}\n'
+    report += f'Communication: {reportResources.get("Communication", "N/A")}\n\n'
 
     report += 'MISSION HISTORY\n'
     report += '–––––––––––––––––––––––––––––––\n'
@@ -570,6 +1385,9 @@ def ShowSimulationResults(simulationResults):
 
     simulationWindow.title('SIMULATION RESULTS')
     simulationWindow.geometry('500x400')
+    simulationWindow.resizable(False, False)
+    simulationWindow.transient(wn)
+    simulationWindow.protocol('WM_DELETE_WINDOW', lambda: EndSimulation(simulationWindow))
 
     tk.Label(simulationWindow, text = 'SIMULATION COMPLETED').pack(pady = 10)
 
@@ -582,12 +1400,14 @@ def ShowSimulationResults(simulationResults):
     tk.Label(simulationWindow, text = f'Score: {SCORE}').pack()
 
     tk.Label(simulationWindow, text = f'Events Processed: {eventsAttended}').pack()
-    tk.Button(simulationWindow, text = 'Continue', command = lambda: EndSimulation(simulationWindow)).pack(pady = 10)
+    PixelButton(simulationWindow, text = 'Continue', command = lambda: EndSimulation(simulationWindow)).pack(pady = 10)
+
+    ApplyPopupTheme(simulationWindow)
 
 def EndSimulation(simulationWindow):
-    simulationWindow.destroy
+    simulationWindow.destroy()
 
-    EndMission()
+    CheckMissionVictory()
 
 def RunSimulation():
     global eventsAttended
@@ -596,16 +1416,29 @@ def RunSimulation():
     if activeCode is None:
         return
 
+    if activeCode not in resources.resources:
+        return
+
+    if missions.m[activeCode].get('Mission Ended', False) or missions.m[activeCode]['Mission State'] == 'Failed':
+        return
+
+    if missions.m[activeCode].get('Manual Event Processed', False) or missions.m[activeCode].get('Simulation Used', False):
+        return
+
+    missions.m[activeCode]['Simulation Used'] = True
+    missions.saveMissions()
+    simulation.grid_remove()
+
     difficultyLevel = missions.m[activeCode]['Mission Difficulty']
 
     if difficultyLevel == 'Easy':
-        simulationEvents = 10
+        simulationEvents = 11
 
     elif difficultyLevel == 'Medium':
-        simulationEvents = 15
+        simulationEvents = 16
 
     else:
-        simulationEvents = 20
+        simulationEvents = 21
 
     simulationResults = []
 
@@ -628,17 +1461,22 @@ def RunSimulation():
         selectedAction = events.possibleActions[missionType][option]['Text']
 
         RegisterAction(f'Simulation Action: {selectedAction}')
+        RegisterDecision(option)
+        RegisterAction(
+            f'Energy: {resources.resources[activeCode]["Energy"]} | Water: {resources.resources[activeCode]["Water"]} | Food: {resources.resources[activeCode]["Food"]} | Communication: {resources.resources[activeCode]["Communication"]} | Score: {SCORE}'
+        )
+
         simulationResults.append(f'{i + 1}. {missionType} → {selectedAction}')
 
-    missions.m[activeCode]['Mission State'] = 'Operating'
+        currentState = UpdateMissionState(missionType)
 
-    missionState.config(text = f'State: {missions.m[activeCode]["Mission State"]}')
-    missionstate.config(text = f'Mission State: {missions.m[activeCode]["Mission State"]}')
+        if currentState == 'Failed':
+            return
 
-    eventsProcessed.config(text = f'Events: {eventsAttended}')
+    eventsProcessed.config(text = eventsAttended)
     eventsStats.config(text = eventsAttended)
 
-    scoreShowed.config(text = f'Score: {SCORE}')
+    scoreShowed.config(text = SCORE)
     scoreStats.config(text = SCORE)
 
     RegisterAction(f'Simulation finished | Score: {SCORE}')
@@ -647,64 +1485,210 @@ def RunSimulation():
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––-
 
-button = tk.Button(panel, text = 'Log In', command = initiateLogin)
+button = PixelButton(panel, text = 'Log In', command = initiateLogin)
+createOperatorButton = PixelButton(panel, text = 'Create Operator', command = OpenCreateOperator)
+exitButton = PixelButton(panel, text = 'Exit', command = wn.destroy)
 
-# ––––––– ORGANIZATION ––––––––
+saveOperatorButton = PixelButton(operatorPanel, text = 'Create', command = SaveOperator)
+backToLoginButton = PixelButton(operatorPanel, text = 'Back', command = BackToLogin)
 
-phrase.pack()
-user.pack()
-password.pack()
-button.pack()
-initiatePhrase.pack()
+# ––––––– LOGIN ––––––––
+
+panel.config(
+    bg = DARK,
+    padx = 54,
+    pady = 44,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+
+phrase.config(
+    text = '2040\nCONTROL SYSTEM',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_HERO,
+    justify = 'center'
+)
+
+initiatePhrase.config(
+    bg = DARK,
+    fg = TEAL,
+    font = FONT_SMALL
+)
+
+StyleEntry(user)
+StyleEntry(password)
+
+user.config(width = 28)
+password.config(width = 28)
+
+StyleButton(button, TEAL, CREAM, TEAL)
+StyleButton(createOperatorButton, DARK, CREAM, TEAL)
+StyleButton(exitButton, ROSE, CREAM, ROSE)
+
+phrase.pack(pady = (0, 30))
+tk.Label(panel, text = 'OPERATOR', bg = DARK, fg = CREAM, font = FONT_SMALL).pack(anchor = 'w')
+user.pack(fill = 'x', ipady = 8, pady = (4, 12))
+
+tk.Label(panel, text = 'PASSWORD', bg = DARK, fg = CREAM, font = FONT_SMALL).pack(anchor = 'w')
+password.pack(fill = 'x', ipady = 8, pady = (4, 20))
+
+button.pack(fill = 'x', pady = 4)
+createOperatorButton.pack(fill = 'x', pady = 4)
+exitButton.pack(fill = 'x', pady = 4)
+
+initiatePhrase.pack(pady = (18, 0))
+
+# ––––––– CREATE OPERATOR ––––––––
+
+operatorPanel.config(
+    bg = DARK,
+    padx = 54,
+    pady = 44,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+
+operatorPhrase.config(
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_SECTION
+)
+
+operatorStatus.config(
+    bg = DARK,
+    fg = ROSE,
+    font = FONT_SMALL
+)
+
+StyleEntry(newOperatorUser)
+StyleEntry(newOperatorPassword)
+StyleEntry(confirmOperatorPassword)
+
+newOperatorUser.config(width = 28)
+newOperatorPassword.config(width = 28)
+confirmOperatorPassword.config(width = 28)
+
+StyleButton(saveOperatorButton, TEAL, CREAM, TEAL)
+StyleButton(backToLoginButton, DARK, CREAM, TEAL)
+
+operatorPhrase.pack(pady = (0, 26))
+
+tk.Label(operatorPanel, text = 'USERNAME', bg = DARK, fg = CREAM, font = FONT_SMALL).pack(anchor = 'w')
+newOperatorUser.pack(fill = 'x', ipady = 8, pady = (4, 12))
+
+tk.Label(operatorPanel, text = 'PASSWORD', bg = DARK, fg = CREAM, font = FONT_SMALL).pack(anchor = 'w')
+newOperatorPassword.pack(fill = 'x', ipady = 8, pady = (4, 12))
+
+tk.Label(operatorPanel, text = 'CONFIRM PASSWORD', bg = DARK, fg = CREAM, font = FONT_SMALL).pack(anchor = 'w')
+confirmOperatorPassword.pack(fill = 'x', ipady = 8, pady = (4, 20))
+
+saveOperatorButton.pack(fill = 'x', pady = 4)
+backToLoginButton.pack(fill = 'x', pady = 4)
+operatorStatus.pack(pady = (16, 0))
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 
-dashboard = tk.Frame(wn)
+dashboard = tk.Frame(wn, bg = DARK)
 
 # ––––––––– TOP FRAME –––––––––
 
-dashboardTopFrame = tk.Frame(dashboard)
+dashboardTopFrame = tk.Frame(dashboard, bg = DARK, padx = 24, pady = 14)
 
-tk.Label(dashboardTopFrame, text = 'RoboYork 2040').pack(anchor = 'w')
+brandFrame = tk.Frame(dashboardTopFrame, bg = DARK)
+brandFrame.pack(side = 'left')
 
-dashboardUser = tk.Label(dashboardTopFrame, text = 'User: ')
-dashboardUser.pack(anchor = 'w')
+brandLabel = tk.Label(
+    brandFrame,
+    text = 'ROBOYORK 2040',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_SECTION
+)
+brandLabel.pack(anchor = 'w')
 
-missionstate = tk.Label(dashboardTopFrame, text = 'Mission State: No mission')
-missionstate.pack(anchor = 'w')
+brandSubtitle = tk.Label(
+    brandFrame,
+    text = 'EMERGENCY CONTROL SYSTEM',
+    bg = DARK,
+    fg = TEAL,
+    font = FONT_SMALL
+)
+brandSubtitle.pack(anchor = 'w', pady = (2, 0))
 
-dashboardMenuFrame = tk.Frame(dashboard)
+topStatusFrame = tk.Frame(dashboardTopFrame, bg = DARK)
+topStatusFrame.pack(side = 'right')
 
-createMission = tk.Button(dashboardMenuFrame, text = 'Create Mission', command = CreateMission)
-resourcesButton = tk.Button(dashboardMenuFrame, text = 'Resources', command = ShowResources)
-processEvent = tk.Button(dashboardMenuFrame, text = 'Process Event', command = ShowEventPopup)
-simulation = tk.Button(dashboardMenuFrame, text = 'Simulation', command = None)
-statistics = tk.Button(dashboardMenuFrame, text = 'Statistics', command = Stats)
-history = tk.Button(dashboardMenuFrame, text = 'History', command = ShowHistory)
-generateReport = tk.Button(dashboardMenuFrame, text = 'Generate Report', command = GenerateReport)
-backupButton = tk.Button(dashboardMenuFrame, text = 'Save Backup', command = SaveBackup)
-missionReportButton = tk.Button(dashboardMenuFrame, text = 'Mission Report', command = ShowFinalReport)
-logOut = tk.Button(dashboardMenuFrame, text = 'Log Out', command = LogOut)
+dashboardUser = tk.Label(
+    topStatusFrame,
+    text = 'User: ',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_BODY
+)
+dashboardUser.pack(anchor = 'e')
 
-dashboardMainFrame = tk.Frame(dashboard)
+missionstate = tk.Label(
+    topStatusFrame,
+    text = 'Mission State: No mission',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_BODY_BOLD
+)
+missionstate.pack(anchor = 'e', pady = (4, 0))
 
-welcomeFrame = tk.Frame(dashboardMainFrame)
+# ––––––––– SIDE MENU –––––––––
 
-mainTextAdvice = tk.Label(welcomeFrame, text = f'Welcome to RoboYork Control System...\nNothing for now...')
-mainTextAdvice.pack()
+dashboardMenuFrame = tk.Frame(dashboard, bg = DARK, padx = 12, pady = 18, width = 220, highlightbackground = TEAL, highlightthickness = 2)
+
+createMission = PixelButton(dashboardMenuFrame, text = 'Create Mission', command = CreateMission)
+resourcesButton = PixelButton(dashboardMenuFrame, text = 'Resources', command = ShowResources)
+processEvent = PixelButton(dashboardMenuFrame, text = 'Process Event', command = ShowEventPopup)
+simulation = PixelButton(dashboardMenuFrame, text = 'Simulation', command = RunSimulation)
+statistics = PixelButton(dashboardMenuFrame, text = 'Statistics', command = Stats)
+history = PixelButton(dashboardMenuFrame, text = 'History', command = ShowHistory)
+generateReport = PixelButton(dashboardMenuFrame, text = 'Generate Report', command = GenerateReport)
+backupButton = PixelButton(dashboardMenuFrame, text = 'Save Backup', command = SaveBackup)
+missionReportButton = PixelButton(dashboardMenuFrame, text = 'Mission Report', command = ShowFinalReport)
+logOut = PixelButton(dashboardMenuFrame, text = 'Log Out', command = LogOut)
+
+sideButtons = (
+    createMission,
+    resourcesButton,
+    processEvent,
+    simulation,
+    statistics,
+    history,
+    generateReport,
+    backupButton,
+    missionReportButton
+)
+
+for sideButton in sideButtons:
+    StyleButton(sideButton, DARK, CREAM, TEAL)
+    sideButton.config(
+        anchor = 'w',
+        activebackground = GREEN,
+        activeforeground = DARK
+    )
+
+StyleButton(logOut, ROSE, CREAM, ROSE)
+logOut.config(anchor = 'w')
+
+dashboardMainFrame = tk.Frame(dashboard, bg = DARK, padx = 34, pady = 30)
 
 # –––––––––– ORGANIZATION –––––––––––
 
-createMission.grid                  (row = 0, sticky = 'ew')
-resourcesButton.grid                (row = 1, sticky = 'ew')
-processEvent.grid                   (row = 2, sticky = 'ew')
-simulation.grid                     (row = 3, sticky = 'ew')
-statistics.grid                     (row = 4, sticky = 'ew')
-history.grid                        (row = 5, sticky = 'ew')
-generateReport.grid                 (row = 6, sticky = 'ew')
-backupButton.grid                   (row = 7, sticky = 'ew')
-missionReportButton.grid            (row = 8, sticky = 'ew')
-logOut.grid                         (row = 10, sticky = 'ew')
+createMission.grid                  (row = 0, sticky = 'ew', pady = 3)
+resourcesButton.grid                (row = 1, sticky = 'ew', pady = 3)
+processEvent.grid                   (row = 2, sticky = 'ew', pady = 3)
+simulation.grid                     (row = 3, sticky = 'ew', pady = 3)
+statistics.grid                     (row = 4, sticky = 'ew', pady = 3)
+history.grid                        (row = 5, sticky = 'ew', pady = 3)
+generateReport.grid                 (row = 6, sticky = 'ew', pady = 3)
+backupButton.grid                   (row = 7, sticky = 'ew', pady = 3)
+missionReportButton.grid            (row = 8, sticky = 'ew', pady = 3)
+logOut.grid                         (row = 10, sticky = 'ew', pady = 3)
 
 # ––––––––– DASHBOARD GRID ––––––––––
 
@@ -718,199 +1702,505 @@ dashboardMainFrame.rowconfigure     (0, weight = 1)
 
 dashboardMenuFrame.columnconfigure  (0, weight = 1)
 dashboardMenuFrame.rowconfigure     (9, weight = 1)
+dashboardMenuFrame.grid_propagate(False)
 
 dashboardTopFrame.grid              (row = 0, column = 0, columnspan = 2, sticky = 'ew')
 dashboardMenuFrame.grid             (row = 1, column = 0, sticky = 'nsew')
 dashboardMainFrame.grid             (row = 1, column = 1, sticky = 'nsew')
 
+# –––––––– WELCOME ––––––––––
+
+welcomeFrame = tk.Frame(dashboardMainFrame, bg = DARK)
+welcomeFrame.grid_anchor('center')
+
+welcomeCard = tk.Frame(
+    welcomeFrame,
+    bg = DARK,
+    padx = 46,
+    pady = 42,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+welcomeCard.grid(row = 0, column = 0)
+
+welcomeEyebrow = tk.Label(
+    welcomeCard,
+    text = 'RCS // ONLINE',
+    bg = DARK,
+    fg = GREEN,
+    font = FONT_BODY_BOLD
+)
+welcomeEyebrow.pack(pady = (0, 12))
+
+mainTextAdvice = tk.Label(
+    welcomeCard,
+    text = 'Welcome to RoboYork Control System...\nNothing for now...',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_SECTION,
+    justify = 'center'
+)
+mainTextAdvice.pack()
+
+welcomeHint = tk.Label(
+    welcomeCard,
+    text = 'CREATE A MISSION TO BEGIN OPERATIONS',
+    bg = DARK,
+    fg = TEAL,
+    font = FONT_SMALL
+)
+welcomeHint.pack(pady = (18, 0))
+
 # –––––––– NEW MISSION ––––––––––
 
-createMissionFrame = tk.Frame(dashboardMainFrame)
+createMissionFrame = tk.Frame(dashboardMainFrame, bg = DARK)
 createMissionFrame.grid_anchor('center')
 
-newMissionTitle = tk.Label(createMissionFrame, text = 'NEW MISSION')
-newMissionTitle.grid                                                                                    (row = 0, column = 0)
+createMissionCard = tk.Frame(
+    createMissionFrame,
+    bg = DARK,
+    padx = 44,
+    pady = 38,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+createMissionCard.grid(row = 0, column = 0)
 
-tk.Label(createMissionFrame, text = 'Mission Name:').grid                                               (row = 2, column = 0)
+newMissionTitle = tk.Label(
+    createMissionCard,
+    text = 'NEW MISSION',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_SECTION
+)
+newMissionTitle.grid(row = 0, column = 0, sticky = 'w', pady = (0, 24))
 
-missionName = tk.Entry(createMissionFrame)
-missionName.grid                                                                                        (row = 3, column = 0)
+missionNameLabel = tk.Label(
+    createMissionCard,
+    text = 'MISSION NAME',
+    bg = DARK,
+    fg = TEAL,
+    font = FONT_SMALL
+)
+missionNameLabel.grid(row = 1, column = 0, sticky = 'w')
 
-difficulty = tk.StringVar(createMissionFrame)
+missionName = tk.Entry(createMissionCard, width = 30)
+StyleEntry(missionName)
+missionName.grid(row = 2, column = 0, sticky = 'ew', ipady = 8, pady = (5, 18))
+
+difficultyLabel = tk.Label(
+    createMissionCard,
+    text = 'DIFFICULTY',
+    bg = DARK,
+    fg = TEAL,
+    font = FONT_SMALL
+)
+difficultyLabel.grid(row = 3, column = 0, sticky = 'w')
+
+difficulty = tk.StringVar(createMissionCard)
 difficulty.set(difficulties[0])
 
-difficultySelector = tk.OptionMenu(createMissionFrame, difficulty, *difficulties)
-difficultySelector.grid                                                                                 (row = 8, column = 0)
+difficultySelector = tk.OptionMenu(createMissionCard, difficulty, *difficulties)
+difficultySelector.config(
+    font = FONT_BODY,
+    bg = GREEN,
+    fg = CREAM,
+    activebackground = TEAL,
+    activeforeground = DARK,
+    relief = 'flat',
+    highlightthickness = 0,
+    width = 25
+)
+difficultySelector['menu'].config(
+    font = FONT_BODY,
+    bg = DARK,
+    fg = CREAM,
+    activebackground = TEAL,
+    activeforeground = DARK
+)
+difficultySelector.grid(row = 4, column = 0, sticky = 'ew', pady = (5, 22))
 
-createMissionButton = tk.Button(createMissionFrame, text = 'Create', command = SaveMission)
-createMissionButton.grid                                                                                (row = 10, column = 0)
+createMissionButton = PixelButton(createMissionCard, text = 'Create', command = SaveMission)
+StyleButton(createMissionButton, TEAL, CREAM, TEAL)
+createMissionButton.grid(row = 5, column = 0, sticky = 'ew')
 
-missionCreationStatus = tk.Label(createMissionFrame, text = '')
-missionCreationStatus.grid                                                                              (row = 12, column = 0)
+missionCreationStatus = tk.Label(
+    createMissionCard,
+    text = '',
+    bg = DARK,
+    fg = ROSE,
+    font = FONT_SMALL
+)
+missionCreationStatus.grid(row = 6, column = 0, pady = (14, 0))
 
 # ––––––– SHOW MISSION –––––––
 
-missionOverviewFrame = tk.Frame(dashboardMainFrame)
+missionOverviewFrame = tk.Frame(dashboardMainFrame, bg = DARK)
 missionOverviewFrame.grid_anchor('center')
 
-missionTitle = tk.Label(missionOverviewFrame, text = 'Mission: N/A')
-missionCode = tk.Label(missionOverviewFrame, text = 'Code: N/A')
-missionDifficulty = tk.Label(missionOverviewFrame, text = 'Difficulty: N/A')
-missionStartButton = tk.Button(missionOverviewFrame, text = 'Start Mission', command = StartMission)
+missionOverviewCard = tk.Frame(
+    missionOverviewFrame,
+    bg = DARK,
+    padx = 50,
+    pady = 40,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+missionOverviewCard.grid(row = 0, column = 0)
 
-missionTitle.grid                                                                                       (row = 0, column = 0)
-missionCode.grid                                                                                        (row = 1, column = 0)
-missionDifficulty.grid                                                                                  (row = 2, column = 0)
-missionStartButton.grid                                                                                 (row = 4, column = 0)
+overviewTitle = tk.Label(
+    missionOverviewCard,
+    text = 'MISSION READY',
+    bg = DARK,
+    fg = GREEN,
+    font = FONT_SECTION
+)
+overviewTitle.pack(pady = (0, 24))
+
+missionTitle = tk.Label(missionOverviewCard, text = 'Mission: N/A', bg = DARK, fg = CREAM, font = FONT_BODY_BOLD)
+missionCode = tk.Label(missionOverviewCard, text = 'Code: N/A', bg = DARK, fg = CREAM, font = FONT_BODY)
+missionDifficulty = tk.Label(missionOverviewCard, text = 'Difficulty: N/A', bg = DARK, fg = CREAM, font = FONT_BODY)
+missionStartButton = PixelButton(missionOverviewCard, text = 'Start Mission', command = StartMission)
+
+missionTitle.pack(pady = 5)
+missionCode.pack(pady = 5)
+missionDifficulty.pack(pady = 5)
+
+StyleButton(missionStartButton, TEAL, CREAM, TEAL)
+missionStartButton.pack(fill = 'x', pady = (24, 0))
 
 # –––––– START MISSION –––––––
 
-missionControlFrame = tk.Frame(dashboardMainFrame)
+missionControlFrame = tk.Frame(dashboardMainFrame, bg = DARK)
 missionControlFrame.grid_anchor('center')
 
-tk.Label(missionControlFrame, text = 'MISSION CONTROL', anchor = 'center').grid(row = 0, column = 0)
+missionControlCard = tk.Frame(
+    missionControlFrame,
+    bg = DARK,
+    padx = 34,
+    pady = 30,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+missionControlCard.grid(row = 0, column = 0)
 
-missionControlName = tk.Label(missionControlFrame, text = 'Mission: N/A', anchor = 'center')
-missionState = tk.Label(missionControlFrame, text = 'State: N/A', anchor = 'center')
-eventsProcessed = tk.Label(missionControlFrame, text = 'Events: N/A', anchor = 'center')
-scoreShowed = tk.Label(missionControlFrame, text = 'Score: N/A', anchor = 'center')
-endMissionButton = tk.Button(missionControlFrame, text = 'End Mission', command = EndMission, anchor = 'center')
+missionControlHeader = tk.Label(
+    missionControlCard,
+    text = 'MISSION CONTROL',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_SECTION
+)
+missionControlHeader.grid(row = 0, column = 0, columnspan = 2, pady = (0, 18))
 
-missionControlName.grid(row = 1, column = 0)
-missionState.grid(row = 4, column = 0)
-eventsProcessed.grid(row = 6, column = 0)
-scoreShowed.grid(row = 7, column = 0)
+missionControlTable = tk.Frame(missionControlCard, bg = DARK)
+missionControlTable.grid(row = 1, column = 0, columnspan = 2, sticky = 'ew')
 
-endMissionButton.grid(row = 10, column = 0)
+missionControlNameText = tk.Label(missionControlTable, text = 'Mission', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+missionStateText = tk.Label(missionControlTable, text = 'State', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+eventsProcessedText = tk.Label(missionControlTable, text = 'Events', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+scoreShowedText = tk.Label(missionControlTable, text = 'Score', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+missionGoalText = tk.Label(missionControlTable, text = 'Goal', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+
+missionControlName = tk.Label(missionControlTable, text = 'N/A', bg = DARK, fg = CREAM, font = FONT_BODY)
+missionState = tk.Label(missionControlTable, text = 'N/A', bg = DARK, fg = CREAM, font = FONT_BODY)
+eventsProcessed = tk.Label(missionControlTable, text = 'N/A', bg = DARK, fg = CREAM, font = FONT_BODY)
+scoreShowed = tk.Label(missionControlTable, text = 'N/A', bg = DARK, fg = CREAM, font = FONT_BODY)
+missionGoal = tk.Label(missionControlTable, text = 'N/A', bg = DARK, fg = CREAM, font = FONT_BODY)
+
+missionControlNameText.grid(row = 0, column = 0, sticky = 'w', padx = (0, 30), pady = 7)
+missionControlName.grid(row = 0, column = 1, sticky = 'w', pady = 7)
+
+missionStateText.grid(row = 1, column = 0, sticky = 'w', padx = (0, 30), pady = 7)
+missionState.grid(row = 1, column = 1, sticky = 'w', pady = 7)
+
+eventsProcessedText.grid(row = 2, column = 0, sticky = 'w', padx = (0, 30), pady = 7)
+eventsProcessed.grid(row = 2, column = 1, sticky = 'w', pady = 7)
+
+scoreShowedText.grid(row = 3, column = 0, sticky = 'w', padx = (0, 30), pady = 7)
+scoreShowed.grid(row = 3, column = 1, sticky = 'w', pady = 7)
+
+missionGoalText.grid(row = 4, column = 0, sticky = 'w', padx = (0, 30), pady = 7)
+missionGoal.grid(row = 4, column = 1, sticky = 'w', pady = 7)
+
+endMissionButton = PixelButton(missionControlCard, text = 'End Mission', command = EndMission, anchor = 'center')
+StyleButton(endMissionButton, TEAL, CREAM, TEAL)
 
 # –––––– RESOURCES ––––––
 
-resourcesFrame = tk.Frame(dashboardMainFrame)
+resourcesFrame = tk.Frame(dashboardMainFrame, bg = DARK)
 resourcesFrame.grid_anchor('center')
 
-energyLabel = tk.Label(resourcesFrame, text = 'Energy')
-waterLabel = tk.Label(resourcesFrame, text = 'Water')
-foodLabel = tk.Label(resourcesFrame, text = 'Food')
-communicationLabel = tk.Label(resourcesFrame, text = 'Communication')
+resourcesCard = tk.Frame(
+    resourcesFrame,
+    bg = DARK,
+    padx = 38,
+    pady = 32,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+resourcesCard.grid(row = 0, column = 0)
 
-energyValue = tk.Label(resourcesFrame, text = 'No database detected')
-waterValue = tk.Label(resourcesFrame, text = 'No database detected')
-foodValue = tk.Label(resourcesFrame, text = 'No database detected')
-communicationValue = tk.Label(resourcesFrame, text = 'No database detected')
+resourcesTitle = tk.Label(resourcesCard, text = 'RESOURCES', bg = DARK, fg = CREAM, font = FONT_SECTION)
+resourcesTitle.grid(row = 0, column = 0, pady = (0, 18))
 
-energyLabel.grid(row = 0, column = 0)
-energyValue.grid(row = 0, column = 1)
+resourcesTableFrame = tk.Frame(resourcesCard, bg = DARK, padx = 16, pady = 14)
+resourcesTableFrame.grid(row = 1, column = 0)
 
-waterLabel.grid(row = 1, column = 0)
-waterValue.grid(row = 1, column = 1)
+resourceHeader = tk.Label(resourcesTableFrame, text = 'RESOURCE', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+currentHeader = tk.Label(resourcesTableFrame, text = 'CURRENT', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+maximumHeader = tk.Label(resourcesTableFrame, text = 'MAX', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
 
-foodLabel.grid(row = 2, column = 0)
-foodValue.grid(row = 2, column = 1)
+resourceHeader.grid(row = 0, column = 0, sticky = 'w', padx = 14, pady = (4, 10))
+currentHeader.grid(row = 0, column = 1, padx = 14, pady = (4, 10))
+maximumHeader.grid(row = 0, column = 2, padx = 14, pady = (4, 10))
 
-communicationLabel.grid(row = 3, column = 0)
-communicationValue.grid(row = 3, column = 1)
+energyLabel = tk.Label(resourcesTableFrame, text = 'Energy', bg = DARK, fg = CREAM, font = FONT_BODY)
+waterLabel = tk.Label(resourcesTableFrame, text = 'Water', bg = DARK, fg = CREAM, font = FONT_BODY)
+foodLabel = tk.Label(resourcesTableFrame, text = 'Food', bg = DARK, fg = CREAM, font = FONT_BODY)
+communicationLabel = tk.Label(resourcesTableFrame, text = 'Communication', bg = DARK, fg = CREAM, font = FONT_BODY)
+
+energyValue = tk.Label(resourcesTableFrame, text = 'No database detected', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+waterValue = tk.Label(resourcesTableFrame, text = 'No database detected', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+foodValue = tk.Label(resourcesTableFrame, text = 'No database detected', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+communicationValue = tk.Label(resourcesTableFrame, text = 'No database detected', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+
+resourceRows = (
+    (1, energyLabel, energyValue, '100'),
+    (2, waterLabel, waterValue, '80'),
+    (3, foodLabel, foodValue, '70'),
+    (4, communicationLabel, communicationValue, '90')
+)
+
+for rowNumber, resourceLabel, valueLabel, maximumValue in resourceRows:
+    resourceLabel.grid(row = rowNumber, column = 0, sticky = 'w', padx = 14, pady = 8)
+    valueLabel.grid(row = rowNumber, column = 1, padx = 14, pady = 8)
+
+    tk.Label(
+        resourcesTableFrame,
+        text = maximumValue,
+        bg = DARK,
+        fg = CREAM,
+        font = FONT_BODY
+    ).grid(row = rowNumber, column = 2, padx = 14, pady = 8)
 
 # ––––– END MISSION ––––––
 
-finalDataCollected = tk.Frame(dashboardMainFrame)
+finalDataCollected = tk.Frame(dashboardMainFrame, bg = DARK)
+finalDataCollected.grid_anchor('center')
 
-tk.Label(finalDataCollected, text = 'MISSION REPORT', anchor = 'center').pack()
+finalCard = tk.Frame(
+    finalDataCollected,
+    bg = DARK,
+    padx = 38,
+    pady = 28,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+finalCard.grid(row = 0, column = 0)
 
-finalScoreLabel = tk.Label(finalDataCollected, text = 'Score: N/A', anchor = 'center')
-finalScoreLabel.pack()
+finalReportTitle = tk.Label(finalCard, text = 'MISSION REPORT', bg = DARK, fg = CREAM, font = FONT_SECTION)
+finalReportTitle.pack(pady = (0, 10))
 
-finalRankDetected = tk.Label(finalDataCollected, text = f'Rank: {determineRank()}', anchor = 'center')
-finalRankDetected.pack()
+finalResultLabel = tk.Label(finalCard, text = 'MISSION RESULT', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+finalResultLabel.pack(pady = 4)
 
-tk.Label(finalDataCollected, text = 'Resources:', anchor = 'center').pack()
+finalScoreLabel = tk.Label(finalCard, text = 'Score: N/A', bg = DARK, fg = CREAM, font = FONT_BODY)
+finalScoreLabel.pack(pady = 3)
 
-finalResourcesFrame = tk.Frame(finalDataCollected)
+finalRankDetected = tk.Label(finalCard, text = f'Rank: {determineRank()}', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+finalRankDetected.pack(pady = 3)
 
-finalEnergyLabel = tk.Label(finalResourcesFrame, text = 'Energy', anchor = 'center')
-finalWaterLabel = tk.Label(finalResourcesFrame, text = 'Water', anchor = 'center')
-finalFoodLabel = tk.Label(finalResourcesFrame, text = 'Food', anchor = 'center')
-finalCommunicationLabel = tk.Label(finalResourcesFrame, text = 'Communication', anchor = 'center')
+failureReasonLabel = tk.Label(finalCard, text = '', bg = DARK, fg = ROSE, font = FONT_BODY, wraplength = 620)
+failureEventLabel = tk.Label(finalCard, text = '', bg = DARK, fg = ROSE, font = FONT_BODY)
 
-finalEnergyValue = tk.Label(finalResourcesFrame, text = 'No database detected', anchor = 'center')
-finalWaterValue = tk.Label(finalResourcesFrame, text = 'No database detected', anchor = 'center')
-finalFoodValue = tk.Label(finalResourcesFrame, text = 'No database detected', anchor = 'center')
-finalCommunicationValue = tk.Label(finalResourcesFrame, text = 'No database detected', anchor = 'center')
+finalResourcesTitle = tk.Label(finalCard, text = 'FINAL RESOURCES', bg = DARK, fg = TEAL, font = FONT_BODY_BOLD)
+finalResourcesTitle.pack(pady = (18, 8))
 
+finalResourcesFrame = tk.Frame(finalCard, bg = DARK, padx = 18, pady = 12)
 finalResourcesFrame.pack()
 
-finalEnergyLabel.grid(row = 0, column = 0)
-finalEnergyValue.grid(row = 0, column = 1)
+finalEnergyLabel = tk.Label(finalResourcesFrame, text = 'Energy', bg = DARK, fg = CREAM, font = FONT_BODY)
+finalWaterLabel = tk.Label(finalResourcesFrame, text = 'Water', bg = DARK, fg = CREAM, font = FONT_BODY)
+finalFoodLabel = tk.Label(finalResourcesFrame, text = 'Food', bg = DARK, fg = CREAM, font = FONT_BODY)
+finalCommunicationLabel = tk.Label(finalResourcesFrame, text = 'Communication', bg = DARK, fg = CREAM, font = FONT_BODY)
 
-finalWaterLabel.grid(row = 1, column = 0)
-finalWaterValue.grid(row = 1, column = 1)
+finalEnergyValue = tk.Label(finalResourcesFrame, text = 'No database detected', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+finalWaterValue = tk.Label(finalResourcesFrame, text = 'No database detected', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+finalFoodValue = tk.Label(finalResourcesFrame, text = 'No database detected', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+finalCommunicationValue = tk.Label(finalResourcesFrame, text = 'No database detected', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
 
-finalFoodLabel.grid(row = 2, column = 0)
-finalFoodValue.grid(row = 2, column = 1)
+finalEnergyLabel.grid(row = 0, column = 0, sticky = 'w', padx = 12, pady = 6)
+finalEnergyValue.grid(row = 0, column = 1, padx = 12, pady = 6)
 
-finalCommunicationLabel.grid(row = 3, column = 0)
-finalCommunicationValue.grid(row = 3, column = 1)
+finalWaterLabel.grid(row = 1, column = 0, sticky = 'w', padx = 12, pady = 6)
+finalWaterValue.grid(row = 1, column = 1, padx = 12, pady = 6)
 
-endContinueButton = tk.Button(finalResourcesFrame, text = 'Continue', command = RestartSession)
-endContinueButton.grid(columnspan = 2)
+finalFoodLabel.grid(row = 2, column = 0, sticky = 'w', padx = 12, pady = 6)
+finalFoodValue.grid(row = 2, column = 1, padx = 12, pady = 6)
+
+finalCommunicationLabel.grid(row = 3, column = 0, sticky = 'w', padx = 12, pady = 6)
+finalCommunicationValue.grid(row = 3, column = 1, padx = 12, pady = 6)
+
+endContinueButton = PixelButton(finalCard, text = 'Continue', command = RestartSession)
+StyleButton(endContinueButton, TEAL, CREAM, TEAL)
+endContinueButton.pack(fill = 'x', pady = (18, 0))
 
 # ––––– STATISTICS ––––––
 
-statisticsFrame = tk.Frame(dashboardMainFrame)
+statisticsFrame = tk.Frame(dashboardMainFrame, bg = DARK)
+statisticsFrame.grid_anchor('center')
 
-tk.Label(statisticsFrame, text = 'STATISTICS').pack()
+statisticsCard = tk.Frame(
+    statisticsFrame,
+    bg = DARK,
+    padx = 38,
+    pady = 30,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+statisticsCard.grid(row = 0, column = 0)
 
-statisticsTableFrame = tk.Frame(statisticsFrame)
+statisticsTitle = tk.Label(statisticsCard, text = 'STATISTICS', bg = DARK, fg = CREAM, font = FONT_SECTION)
+statisticsTitle.pack(pady = (0, 18))
 
-scoreTableStatsText = tk.Label(statisticsTableFrame, text = 'Score')
-eventsOccuredStatsText = tk.Label(statisticsTableFrame, text = 'Events Occured')
-missionStateStatsText = tk.Label(statisticsTableFrame, text = 'Mission State')
+statisticsTableFrame = tk.Frame(statisticsCard, bg = DARK, padx = 18, pady = 14)
 
-scoreStats = tk.Label(statisticsTableFrame, text = 'N/A')
-eventsStats = tk.Label(statisticsTableFrame, text = 'N/A')
-missionStats = tk.Label(statisticsTableFrame, text = 'N/A')
+scoreTableStatsText = tk.Label(statisticsTableFrame, text = 'Score', bg = DARK, fg = CREAM, font = FONT_BODY)
+eventsOccuredStatsText = tk.Label(statisticsTableFrame, text = 'Events Occurred', bg = DARK, fg = CREAM, font = FONT_BODY)
+correctDecisionsStatsText = tk.Label(statisticsTableFrame, text = 'Correct Decisions', bg = DARK, fg = CREAM, font = FONT_BODY)
+incorrectDecisionsStatsText = tk.Label(statisticsTableFrame, text = 'Incorrect Decisions', bg = DARK, fg = CREAM, font = FONT_BODY)
+energyStatsText = tk.Label(statisticsTableFrame, text = 'Energy', bg = DARK, fg = CREAM, font = FONT_BODY)
+waterStatsText = tk.Label(statisticsTableFrame, text = 'Water', bg = DARK, fg = CREAM, font = FONT_BODY)
+foodStatsText = tk.Label(statisticsTableFrame, text = 'Food', bg = DARK, fg = CREAM, font = FONT_BODY)
+communicationStatsText = tk.Label(statisticsTableFrame, text = 'Communication', bg = DARK, fg = CREAM, font = FONT_BODY)
+missionStateStatsText = tk.Label(statisticsTableFrame, text = 'Mission State', bg = DARK, fg = CREAM, font = FONT_BODY)
 
-scoreTableStatsText.grid(row = 0, column = 0)
-scoreStats.grid(row = 0, column = 1)
+scoreStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+eventsStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+correctStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+incorrectStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = CREAM, font = FONT_BODY_BOLD)
+energyStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+waterStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+foodStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+communicationStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = GREEN, font = FONT_BODY_BOLD)
+missionStats = tk.Label(statisticsTableFrame, text = 'N/A', bg = DARK, fg = CREAM, font = FONT_BODY_BOLD)
 
-eventsOccuredStatsText.grid(row = 1, column = 0)
-eventsStats.grid(row = 1, column = 1)
+statisticsRows = (
+    (0, scoreTableStatsText, scoreStats),
+    (1, eventsOccuredStatsText, eventsStats),
+    (2, correctDecisionsStatsText, correctStats),
+    (3, incorrectDecisionsStatsText, incorrectStats),
+    (4, energyStatsText, energyStats),
+    (5, waterStatsText, waterStats),
+    (6, foodStatsText, foodStats),
+    (7, communicationStatsText, communicationStats),
+    (8, missionStateStatsText, missionStats)
+)
 
-missionStateStatsText.grid(row = 2, column = 0)
-missionStats.grid(row = 2, column = 1)
+for rowNumber, statLabel, statValue in statisticsRows:
+    statLabel.grid(row = rowNumber, column = 0, sticky = 'w', padx = (10, 34), pady = 6)
+    statValue.grid(row = rowNumber, column = 1, sticky = 'e', padx = 10, pady = 6)
 
 statisticsTableFrame.pack()
 
 # ––––– HISTORY –––––
 
-historyFrame = tk.Frame(dashboardMainFrame)
+historyFrame = tk.Frame(dashboardMainFrame, bg = DARK)
+historyFrame.grid_anchor('center')
 
-tk.Label(historyFrame, text = 'HISTORY').pack()
-
-historyMissionSelector = ttk.Combobox(
+historyCard = tk.Frame(
     historyFrame,
-    state = 'readonly'
+    bg = DARK,
+    padx = 34,
+    pady = 28,
+    highlightbackground = TEAL,
+    highlightthickness = 2
+)
+historyCard.grid(row = 0, column = 0)
+
+historyTitle = tk.Label(historyCard, text = 'HISTORY', bg = DARK, fg = CREAM, font = FONT_SECTION)
+historyTitle.pack(pady = (0, 14))
+
+historySelectorLabel = tk.Label(
+    historyCard,
+    text = 'SELECT MISSION',
+    bg = DARK,
+    fg = TEAL,
+    font = FONT_SMALL
+)
+historySelectorLabel.pack(anchor = 'w')
+
+ttkStyle = ttk.Style()
+try:
+    ttkStyle.theme_use('clam')
+except tk.TclError:
+    pass
+
+ttkStyle.configure(
+    'RCS.TCombobox',
+    fieldbackground = DARK,
+    background = DARK,
+    foreground = CREAM,
+    arrowcolor = CREAM,
+    bordercolor = TEAL,
+    lightcolor = TEAL,
+    darkcolor = TEAL,
+    padding = 7,
+    font = FONT_BODY
 )
 
-historyMissionSelector.pack()
+ttkStyle.map(
+    'RCS.TCombobox',
+    fieldbackground = [('readonly', DARK)],
+    foreground = [('readonly', CREAM)],
+    selectbackground = [('readonly', DARK)],
+    selectforeground = [('readonly', CREAM)],
+    bordercolor = [('focus', GREEN), ('readonly', TEAL)]
+)
+
+historyMissionSelector = ttk.Combobox(
+    historyCard,
+    state = 'readonly',
+    style = 'RCS.TCombobox',
+    width = 46
+)
+
+historyMissionSelector.pack(fill = 'x', pady = (5, 14))
 
 historyMissionSelector.bind(
     '<<ComboboxSelected>>',
     LoadHistory
 )
 
-historyListFrame = tk.Frame(historyFrame)
+historyListFrame = tk.Frame(historyCard, bg = DARK)
 historyListFrame.pack()
 
 historyList = tk.Listbox(
     historyListFrame,
-    width = 80,
-    height = 20
+    width = 78,
+    height = 18,
+    bg = DARK,
+    fg = CREAM,
+    selectbackground = TEAL,
+    selectforeground = CREAM,
+    font = FONT_BODY,
+    relief = 'flat',
+    highlightbackground = TEAL,
+    highlightcolor = GREEN,
+    highlightthickness = 2,
+    bd = 0
 )
 
 historyScroll = tk.Scrollbar(
     historyListFrame,
     orient = 'vertical',
-    command = historyList.yview
+    command = historyList.yview,
+    bg = TEAL,
+    activebackground = GREEN,
+    troughcolor = DARK,
+    relief = 'flat',
+    bd = 0
 )
 
 historyList.config(
@@ -938,6 +2228,7 @@ for frame in pages:
 
 welcomeFrame.tkraise()
 
+UpdateEndMissionButton()
 ShowPreMissionMenu()
 
 wn.mainloop()

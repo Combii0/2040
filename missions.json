@@ -1,16 +1,2 @@
 {
-    "4468449": {
-        "Mission Name": "fadas",
-        "Mission Code": 4468449,
-        "Mission Difficulty": "Easy",
-        "Mission State": "Finished",
-        "History": [
-            "Mission created",
-            "Mission started",
-            "Event detected: Communication Loss",
-            "Action selected: Deploy emergency radio units",
-            "Energy: 92 | Water: 71 | Food: 50 | Communication: 90 | Score: 100",
-            "Mission finished"
-        ]
-    }
 }
