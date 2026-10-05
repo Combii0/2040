@@ -2,6 +2,9 @@
 # Colegio Anglo Americano
 # 11E.
 
+# PD: This is a serious work with funny code. To get good results you'll need to enjoy the RCS and the code itself.
+# I Hope you enjoy it as much as I enjoyed making it!
+
 import tkinter as tk
 from tkinter import ttk, filedialog
 
