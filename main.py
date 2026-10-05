@@ -12,6 +12,13 @@ import sys
 import ctypes
 import tkinter.font as tkfont
 
+os.environ.setdefault('PYGAME_HIDE_SUPPORT_PROMPT', '1')
+
+try:
+    import pygame
+except ImportError:
+    pygame = None
+
 from datetime import datetime
 
 import users, missions, resources, events
@@ -85,6 +92,62 @@ PAUSE_SHADE = '#0B100C'
 resourceFolder = os.path.join(os.path.dirname(__file__), 'Resources')
 regularFontPath = os.path.join(resourceFolder, 'pixeloid.ttf')
 boldFontPath = os.path.join(resourceFolder, 'pixeloid_bold.ttf')
+buzzGifPath = os.path.join(resourceFolder, 'buzz.gif')
+menuMusicPath = os.path.join(resourceFolder, 'Mechanical Process.mp3')
+gameMusicPath = os.path.join(resourceFolder, 'Mechanissues.mp3')
+
+sfxFolder = os.path.join(resourceFolder, 'SFX')
+selectSFXPath = os.path.join(sfxFolder, 'sl.mp3')
+damageSFXPath = os.path.join(sfxFolder, 'damage.mp3')
+popSFXPath = os.path.join(sfxFolder, 'pop.mp3')
+startSFXPath = os.path.join(sfxFolder, 'start.mp3')
+
+iconsFolder = os.path.join(resourceFolder, 'icons')
+logoPath = os.path.join(iconsFolder, 'logo.png')
+volumeIconPath = os.path.join(iconsFolder, 'volume.png')
+
+appLogoImage = None
+volumeIconImage = None
+
+try:
+    if os.path.exists(logoPath):
+        appLogoImage = tk.PhotoImage(
+            file = logoPath
+        )
+
+        wn.iconphoto(
+            True,
+            appLogoImage
+        )
+
+    if os.path.exists(volumeIconPath):
+        volumeIconImage = tk.PhotoImage(
+            file = volumeIconPath
+        )
+
+        targetIconSize = S(22)
+        largestIconSide = max(
+            volumeIconImage.width(),
+            volumeIconImage.height()
+        )
+
+        if largestIconSide > targetIconSize:
+            iconReduction = max(
+                1,
+                int(
+                    (largestIconSide + targetIconSize - 1)
+                    / targetIconSize
+                )
+            )
+
+            volumeIconImage = volumeIconImage.subsample(
+                iconReduction,
+                iconReduction
+            )
+
+except tk.TclError:
+    appLogoImage = None
+    volumeIconImage = None
 
 def RegisterFont(fontPath):
     if not os.path.exists(fontPath):
@@ -261,6 +324,11 @@ class PixelButton(tk.Label):
     def InvokeCommand(self, event = None):
         if self.buttonState == 'disabled':
             return
+
+        PlaySFX(
+            selectSFXSound,
+            selectSFXChannel
+        )
 
         if callable(self.command):
             self.command()
@@ -570,6 +638,42 @@ dimmedWidgetStyles = {}
 loadedBackupMissionCode = None
 loadedBackupRuntime = None
 
+audioReady = False
+menuMusicSound = None
+gameMusicSound = None
+menuMusicChannel = None
+gameMusicChannel = None
+musicFadeJob = None
+musicMode = None
+
+masterVolume = 1.0
+menuMixVolume = 0.0
+gameMixVolume = 0.0
+
+volumePanelOpen = False
+volumeAnimationJob = None
+volumePanelCurrentHeight = 0
+
+startupBuzzPending = False
+startupSequenceComplete = False
+
+selectSFXSound = None
+damageSFXSound = None
+popSFXSound = None
+startSFXSound = None
+
+selectSFXChannel = None
+popSFXChannel = None
+damageSFXChannel = None
+startSFXChannel = None
+
+buzzFrames = []
+buzzFrameIndex = 0
+buzzActive = False
+buzzScheduleJob = None
+buzzFrameJob = None
+buzzHideJob = None
+
 terminalBlinkState = False
 terminalBlinkJob = None
 
@@ -619,6 +723,7 @@ def initiateLogin():
         wn.update_idletasks()
         wn.update()
 
+        PositionVolumeControl()
         ShowFrame(welcomeFrame)
 
         dashboardUser.config(text = f'User: {u}')
@@ -642,6 +747,7 @@ def initiateLogin():
         else:
             RegisterAction(f'Operator logged in: {u}')
             ShowMissionMenu()
+            SetMusicMode('game')
             ResumeDamagePad()
 
         password.delete(0, tk.END)
@@ -709,12 +815,15 @@ def SaveOperator():
     BackToLogin()
 
 def BackToLogin():
+    SetMusicMode('menu')
+
     operatorPanel.pack_forget()
     dashboard.pack_forget()
     panel.pack(expand = True)
     panel.lift()
     wn.update_idletasks()
     wn.update()
+    PositionVolumeControl()
     user.focus_set()
 
 def LogOut():
@@ -785,6 +894,720 @@ def RegisterAction(action):
     missions.saveMissions()
 
 
+
+def InitializeAudio():
+    global audioReady
+    global menuMusicSound
+    global gameMusicSound
+    global menuMusicChannel
+    global gameMusicChannel
+    global selectSFXSound
+    global damageSFXSound
+    global popSFXSound
+    global startSFXSound
+    global selectSFXChannel
+    global popSFXChannel
+    global damageSFXChannel
+    global startSFXChannel
+
+    if pygame is None:
+        return
+
+    try:
+        pygame.mixer.init()
+        pygame.mixer.set_num_channels(
+            max(
+                6,
+                pygame.mixer.get_num_channels()
+            )
+        )
+
+        audioReady = True
+
+        if os.path.exists(menuMusicPath):
+            menuMusicSound = pygame.mixer.Sound(
+                menuMusicPath
+            )
+
+            menuMusicChannel = pygame.mixer.Channel(0)
+            menuMusicChannel.set_volume(0.0)
+
+        if os.path.exists(gameMusicPath):
+            gameMusicSound = pygame.mixer.Sound(
+                gameMusicPath
+            )
+
+            gameMusicChannel = pygame.mixer.Channel(1)
+            gameMusicChannel.set_volume(0.0)
+
+        selectSFXChannel = pygame.mixer.Channel(2)
+        popSFXChannel = pygame.mixer.Channel(3)
+        damageSFXChannel = pygame.mixer.Channel(4)
+        startSFXChannel = pygame.mixer.Channel(5)
+
+        if os.path.exists(selectSFXPath):
+            selectSFXSound = pygame.mixer.Sound(
+                selectSFXPath
+            )
+
+        if os.path.exists(damageSFXPath):
+            damageSFXSound = pygame.mixer.Sound(
+                damageSFXPath
+            )
+
+        if os.path.exists(popSFXPath):
+            popSFXSound = pygame.mixer.Sound(
+                popSFXPath
+            )
+
+        if os.path.exists(startSFXPath):
+            startSFXSound = pygame.mixer.Sound(
+                startSFXPath
+            )
+
+    except Exception:
+        audioReady = False
+        menuMusicSound = None
+        gameMusicSound = None
+        menuMusicChannel = None
+        gameMusicChannel = None
+
+        selectSFXSound = None
+        damageSFXSound = None
+        popSFXSound = None
+        startSFXSound = None
+
+        selectSFXChannel = None
+        popSFXChannel = None
+        damageSFXChannel = None
+        startSFXChannel = None
+
+def StartMusicPlayback():
+    if not audioReady:
+        return
+
+    try:
+        if (
+            menuMusicSound is not None
+            and menuMusicChannel is not None
+            and not menuMusicChannel.get_busy()
+        ):
+            menuMusicChannel.play(
+                menuMusicSound,
+                loops = -1
+            )
+
+            menuMusicChannel.set_volume(
+                menuMixVolume * masterVolume
+            )
+
+        if (
+            gameMusicSound is not None
+            and gameMusicChannel is not None
+            and not gameMusicChannel.get_busy()
+        ):
+            gameMusicChannel.play(
+                gameMusicSound,
+                loops = -1
+            )
+
+            gameMusicChannel.set_volume(
+                gameMixVolume * masterVolume
+            )
+
+    except Exception:
+        pass
+
+def PlaySFX(sound, channel = None, volume = 1.0):
+    if not audioReady:
+        return
+
+    if sound is None:
+        return
+
+    try:
+        finalVolume = max(
+            0.0,
+            min(
+                1.0,
+                volume * masterVolume
+            )
+        )
+
+        if channel is None:
+            sound.set_volume(
+                finalVolume
+            )
+
+            sound.play()
+
+        else:
+            channel.set_volume(
+                finalVolume
+            )
+
+            channel.play(
+                sound
+            )
+
+    except Exception:
+        pass
+
+def ApplyMasterVolume():
+    if not audioReady:
+        return
+
+    try:
+        if menuMusicChannel is not None:
+            menuMusicChannel.set_volume(
+                menuMixVolume * masterVolume
+            )
+
+        if gameMusicChannel is not None:
+            gameMusicChannel.set_volume(
+                gameMixVolume * masterVolume
+            )
+
+        for sfxChannel in [
+            selectSFXChannel,
+            popSFXChannel,
+            damageSFXChannel,
+            startSFXChannel
+        ]:
+            if sfxChannel is not None:
+                sfxChannel.set_volume(
+                    masterVolume
+                )
+
+    except Exception:
+        pass
+
+def SetMasterVolume(value):
+    global masterVolume
+
+    try:
+        sliderValue = float(value)
+
+    except (TypeError, ValueError):
+        return
+
+    sliderValue = max(
+        0.0,
+        min(
+            100.0,
+            sliderValue
+        )
+    )
+
+    masterVolume = sliderValue / 100.0
+
+    if 'volumePercentLabel' in globals():
+        volumePercentLabel.config(
+            text = f'{int(round(sliderValue))}%'
+        )
+
+    ApplyMasterVolume()
+
+def MusicTargetVolumes(mode):
+    if mode == 'menu':
+        return 1.0, 0.0
+
+    if mode == 'game':
+        return 0.0, 1.0
+
+    if mode == 'pause':
+        return 0.0, 0.4
+
+    return 0.0, 0.0
+
+def SetMusicMode(mode, fadeMilliseconds = 650):
+    global musicFadeJob
+    global musicMode
+    global menuMixVolume
+    global gameMixVolume
+
+    musicMode = mode
+
+    if not audioReady:
+        return
+
+    StartMusicPlayback()
+
+    if musicFadeJob is not None:
+        try:
+            wn.after_cancel(
+                musicFadeJob
+            )
+
+        except tk.TclError:
+            pass
+
+        musicFadeJob = None
+
+    targetMenuVolume, targetGameVolume = MusicTargetVolumes(
+        mode
+    )
+
+    startMenuVolume = menuMixVolume
+    startGameVolume = gameMixVolume
+
+    steps = 13
+    interval = max(
+        1,
+        int(fadeMilliseconds / steps)
+    )
+
+    def FadeStep(step):
+        global musicFadeJob
+        global menuMixVolume
+        global gameMixVolume
+
+        progress = step / steps
+
+        menuMixVolume = startMenuVolume + (
+            targetMenuVolume - startMenuVolume
+        ) * progress
+
+        gameMixVolume = startGameVolume + (
+            targetGameVolume - startGameVolume
+        ) * progress
+
+        if menuMusicChannel is not None:
+            menuMusicChannel.set_volume(
+                max(
+                    0.0,
+                    min(
+                        1.0,
+                        menuMixVolume * masterVolume
+                    )
+                )
+            )
+
+        if gameMusicChannel is not None:
+            gameMusicChannel.set_volume(
+                max(
+                    0.0,
+                    min(
+                        1.0,
+                        gameMixVolume * masterVolume
+                    )
+                )
+            )
+
+        if step < steps:
+            musicFadeJob = wn.after(
+                interval,
+                lambda: FadeStep(step + 1)
+            )
+
+        else:
+            musicFadeJob = None
+
+    FadeStep(1)
+
+def PrepareBuzzEffect(scheduleNext = True):
+    global buzzFrames
+
+    buzzFrames = []
+
+    if not os.path.exists(buzzGifPath):
+        return
+
+    frameIndex = 0
+
+    while frameIndex < 36:
+        try:
+            frame = tk.PhotoImage(
+                file = buzzGifPath,
+                format = f'gif -index {frameIndex}'
+            )
+
+            buzzFrames.append(frame)
+            frameIndex += 1
+
+        except tk.TclError:
+            break
+
+    if buzzFrames and scheduleNext:
+        ScheduleNextBuzz()
+
+def FinishStartupSequence():
+    global startupBuzzPending
+    global startupSequenceComplete
+
+    startupBuzzPending = False
+    startupSequenceComplete = True
+
+    StartMusicPlayback()
+    SetMusicMode(
+        'menu',
+        1800
+    )
+
+def StartStartupSequence():
+    global startupBuzzPending
+
+    if buzzFrames:
+        startupBuzzPending = True
+
+        PlaySFX(
+            damageSFXSound,
+            damageSFXChannel
+        )
+
+        ShowBuzzEffect()
+
+    else:
+        FinishStartupSequence()
+
+def ScheduleNextBuzz():
+    global buzzScheduleJob
+
+    if not buzzFrames:
+        return
+
+    if buzzScheduleJob is not None:
+        try:
+            wn.after_cancel(
+                buzzScheduleJob
+            )
+
+        except tk.TclError:
+            pass
+
+    buzzScheduleJob = wn.after(
+        random.randint(
+            22000,
+            55000
+        ),
+        ShowBuzzEffect
+    )
+
+def DrawBuzzFrame():
+    if not buzzFrames:
+        return
+
+    buzzCanvas.delete('all')
+
+    frame = buzzFrames[buzzFrameIndex]
+
+    frameWidth = max(
+        1,
+        frame.width()
+    )
+
+    frameHeight = max(
+        1,
+        frame.height()
+    )
+
+    currentWidth = max(
+        1,
+        wn.winfo_width()
+    )
+
+    currentHeight = max(
+        1,
+        wn.winfo_height()
+    )
+
+    for x in range(
+        0,
+        currentWidth,
+        frameWidth
+    ):
+        for y in range(
+            0,
+            currentHeight,
+            frameHeight
+        ):
+            buzzCanvas.create_image(
+                x,
+                y,
+                image = frame,
+                anchor = 'nw'
+            )
+
+def AnimateBuzzEffect():
+    global buzzFrameIndex
+    global buzzFrameJob
+
+    if not buzzActive:
+        return
+
+    buzzFrameIndex = (
+        buzzFrameIndex + 1
+    ) % len(buzzFrames)
+
+    DrawBuzzFrame()
+
+    buzzFrameJob = wn.after(
+        45,
+        AnimateBuzzEffect
+    )
+
+def ShowBuzzEffect():
+    global buzzActive
+    global buzzFrameIndex
+    global buzzScheduleJob
+    global buzzHideJob
+
+    buzzScheduleJob = None
+
+    if not buzzFrames:
+        return
+
+    buzzActive = True
+    buzzFrameIndex = random.randint(
+        0,
+        len(buzzFrames) - 1
+    )
+
+    buzzCanvas.place(
+        x = 0,
+        y = 0,
+        relwidth = 1,
+        relheight = 1
+    )
+
+    buzzCanvas.tk.call(
+        'raise',
+        buzzCanvas._w
+    )
+
+    DrawBuzzFrame()
+    AnimateBuzzEffect()
+
+    buzzHideJob = wn.after(
+        random.randint(
+            140,
+            320
+        ),
+        HideBuzzEffect
+    )
+
+def HideBuzzEffect():
+    global buzzActive
+    global buzzFrameJob
+    global buzzHideJob
+
+    buzzActive = False
+
+    if buzzFrameJob is not None:
+        try:
+            wn.after_cancel(
+                buzzFrameJob
+            )
+
+        except tk.TclError:
+            pass
+
+    buzzFrameJob = None
+    buzzHideJob = None
+
+    buzzCanvas.place_forget()
+
+    if startupBuzzPending:
+        FinishStartupSequence()
+
+    ScheduleNextBuzz()
+
+def IsWidgetInside(widget, parent):
+    currentWidget = widget
+
+    while currentWidget is not None:
+        if currentWidget == parent:
+            return True
+
+        try:
+            currentWidget = currentWidget.master
+
+        except AttributeError:
+            return False
+
+    return False
+
+def VolumeControlCoordinates():
+    wn.update_idletasks()
+
+    if (
+        currentUser is not None
+        and 'dashboardMainFrame' in globals()
+        and dashboard.winfo_ismapped()
+    ):
+        positionX = (
+            dashboardMainFrame.winfo_rootx()
+            - wn.winfo_rootx()
+            + S(12)
+        )
+
+        positionY = (
+            dashboardMainFrame.winfo_rooty()
+            - wn.winfo_rooty()
+            + dashboardMainFrame.winfo_height()
+            - S(12)
+        )
+
+        return positionX, positionY
+
+    return (
+        S(16),
+        WINDOW_HEIGHT - S(16)
+    )
+
+def PositionVolumeControl():
+    if 'volumeButton' not in globals():
+        return
+
+    positionX, positionY = VolumeControlCoordinates()
+
+    volumeButton.place(
+        x = positionX,
+        y = positionY,
+        anchor = 'sw'
+    )
+
+    if volumePanelOpen or volumePanelCurrentHeight > 0:
+        PlaceVolumePanel(
+            volumePanelCurrentHeight
+        )
+
+    LiftVolumeControl()
+
+def LiftVolumeControl():
+    if 'volumeButton' not in globals():
+        return
+
+    if volumePanelOpen:
+        volumePanel.lift()
+
+    volumeButton.lift()
+
+def PlaceVolumePanel(height):
+    if 'volumePanel' not in globals():
+        return
+
+    positionX, positionY = VolumeControlCoordinates()
+
+    wn.update_idletasks()
+
+    buttonHeight = max(
+        S(40),
+        volumeButton.winfo_reqheight()
+    )
+
+    volumePanel.place(
+        x = positionX,
+        y = positionY - buttonHeight - S(8),
+        anchor = 'sw',
+        width = S(58),
+        height = max(
+            1,
+            int(height)
+        )
+    )
+
+    volumePanel.lift()
+    volumeButton.lift()
+
+def AnimateVolumePanel(openPanel):
+    global volumeAnimationJob
+    global volumePanelCurrentHeight
+    global volumePanelOpen
+
+    if volumeAnimationJob is not None:
+        try:
+            wn.after_cancel(
+                volumeAnimationJob
+            )
+
+        except tk.TclError:
+            pass
+
+        volumeAnimationJob = None
+
+    targetHeight = S(158) if openPanel else 0
+    startingHeight = volumePanelCurrentHeight
+
+    steps = 9
+    interval = 18
+
+    if openPanel:
+        volumePanelOpen = True
+        PlaceVolumePanel(
+            max(
+                1,
+                startingHeight
+            )
+        )
+
+    def AnimationStep(step):
+        global volumeAnimationJob
+        global volumePanelCurrentHeight
+        global volumePanelOpen
+
+        progress = step / steps
+
+        volumePanelCurrentHeight = int(
+            startingHeight
+            + (
+                targetHeight - startingHeight
+            ) * progress
+        )
+
+        if volumePanelCurrentHeight > 0:
+            PlaceVolumePanel(
+                volumePanelCurrentHeight
+            )
+
+        if step < steps:
+            volumeAnimationJob = wn.after(
+                interval,
+                lambda: AnimationStep(
+                    step + 1
+                )
+            )
+
+        else:
+            volumeAnimationJob = None
+            volumePanelCurrentHeight = targetHeight
+
+            if not openPanel:
+                volumePanelOpen = False
+                volumePanel.place_forget()
+
+    AnimationStep(1)
+
+def ToggleVolumePanel():
+    AnimateVolumePanel(
+        not volumePanelOpen
+    )
+
+def CloseVolumePanel():
+    if not volumePanelOpen:
+        return
+
+    AnimateVolumePanel(
+        False
+    )
+
+def HandleVolumeOutsideClick(event):
+    if not volumePanelOpen:
+        return
+
+    if IsWidgetInside(
+        event.widget,
+        volumeButton
+    ):
+        return
+
+    if IsWidgetInside(
+        event.widget,
+        volumePanel
+    ):
+        return
+
+    CloseVolumePanel()
 
 def IsMissionOperating():
     return (
@@ -892,6 +1715,11 @@ def OpenModal(title, mode):
     global modalOpen
     global modalMode
 
+    PlaySFX(
+        popSFXSound,
+        popSFXChannel
+    )
+
     firstOpen = not modalOpen
 
     if firstOpen:
@@ -932,6 +1760,7 @@ def OpenModal(title, mode):
         'pause-history': (0.76, 0.78),
         'pause-backup': (0.62, 0.54),
         'pause-end': (0.62, 0.54),
+        'pause-abort': (0.62, 0.54),
         'pause-simulation': (0.66, 0.58),
         'simulation-results': (0.74, 0.76),
         'event': (0.76, 0.64),
@@ -952,6 +1781,7 @@ def OpenModal(title, mode):
     )
 
     modalCard.lift()
+    LiftVolumeControl()
     wn.update_idletasks()
 
 def HideModal():
@@ -1024,6 +1854,7 @@ def ResumeFromPause():
 
     missionPaused = False
     HideModal()
+    SetMusicMode('game')
 
     RegisterAction('Mission resumed')
 
@@ -1040,6 +1871,7 @@ def ShowPauseMenu():
 
     missionPaused = True
     PauseDamagePad()
+    SetMusicMode('pause')
 
     OpenModal('MISSION PAUSED', 'pause')
 
@@ -1075,12 +1907,21 @@ def ShowPauseMenu():
         ShowPauseSimulation
     )
 
-    ModalButton(
-        'End Mission',
-        ShowPauseEndMission,
-        ROSE,
-        ROSE
-    )
+    if missions.m[activeCode].get('Victory Achieved', False):
+        ModalButton(
+            'End Mission',
+            ShowPauseEndMission,
+            ROSE,
+            ROSE
+        )
+
+    else:
+        ModalButton(
+            'Abort Mission',
+            ShowPauseAbortMission,
+            ROSE,
+            ROSE
+        )
 
 def TogglePause(event = None):
     if eventPopUpOpened:
@@ -1098,6 +1939,7 @@ def TogglePause(event = None):
             'pause-history',
             'pause-backup',
             'pause-end',
+            'pause-abort',
             'pause-simulation',
             'simulation-results'
         ]:
@@ -1265,6 +2107,65 @@ def ShowPauseBackup():
     ModalButton('Create Backup', CreatePauseBackup, TEAL, TEAL)
     ModalButton('Back', ShowPauseMenu)
 
+def ShowPauseAbortMission():
+    OpenModal(
+        'ABORT MISSION',
+        'pause-abort'
+    )
+
+    ModalText(
+        'Abort the current mission? This action will end the mission immediately and cannot be undone.',
+        ROSE
+    )
+
+    ModalButton(
+        'Abort Mission',
+        ConfirmAbortMission,
+        ROSE,
+        ROSE
+    )
+
+    ModalButton(
+        'Back',
+        ShowPauseMenu
+    )
+
+def ConfirmAbortMission():
+    global missionPaused
+
+    if not IsMissionOperating():
+        return
+
+    missionPaused = False
+    HideModal()
+    StopDamagePad()
+    SetMusicMode('menu')
+
+    mission = missions.m[activeCode]
+
+    mission['Mission State'] = 'Failed'
+    mission['Mission Ended'] = True
+    mission['Failure Reason'] = 'Mission aborted by operator.'
+    mission['Failure Event'] = 'Manual Abort'
+
+    RegisterAction(
+        'Mission aborted by operator'
+    )
+
+    SaveFinalMissionData()
+
+    missionstate.config(
+        text = 'Mission State: Failed'
+    )
+
+    missionState.config(
+        text = 'Failed'
+    )
+
+    UpdateStateColors()
+    ShowEndMissionMenu()
+    ShowFinalReport()
+
 def ShowPauseEndMission():
     OpenModal('END MISSION', 'pause-end')
 
@@ -1382,6 +2283,8 @@ def ContinueLoadedMission():
 
     activeCode = loadedBackupMissionCode
     mission = missions.m[activeCode]
+
+    SetMusicMode('game')
 
     if mission.get('Mission Ended', False) or mission.get('Mission State') == 'Failed':
         return
@@ -1917,6 +2820,13 @@ def StartMission():
     global correctDecisions
     global incorrectDecisions
 
+    SetMusicMode('game')
+
+    PlaySFX(
+        startSFXSound,
+        startSFXChannel
+    )
+
     ShowFrame(missionControlFrame)
 
     correctDecisions = 0
@@ -2038,6 +2948,7 @@ def FailMission(resourceName, lastEvent):
 
     StopDamagePad()
     HideModal()
+    SetMusicMode('menu')
     missionPaused = False
 
     if 'miniDamagePadFrame' in globals():
@@ -2170,6 +3081,8 @@ def UpdateEndMissionButton():
     endMissionButton.grid_remove()
 
 def ShowVictoryPopup():
+    SetMusicMode('pause')
+
     OpenModal(
         'MISSION VICTORIOUS',
         'victory'
@@ -2205,6 +3118,7 @@ def CompleteVictory():
 
 def ContinueIndefinitely():
     HideModal()
+    SetMusicMode('game')
 
     RegisterAction(
         'Mission continued indefinitely after victory'
@@ -2262,6 +3176,7 @@ def EndMission():
         return
 
     StopDamagePad()
+    SetMusicMode('menu')
 
     mission['Mission State'] = 'Completed'
     mission['Mission Ended'] = True
@@ -2292,6 +3207,7 @@ def RestartSession():
 
     StopDamagePad()
     HideModal()
+    SetMusicMode('menu')
     missionPaused = False
 
     if 'miniDamagePadFrame' in globals():
@@ -3396,6 +4312,11 @@ def DamageReachedTerminal(damage):
     if damage not in damages:
         return
 
+    PlaySFX(
+        damageSFXSound,
+        damageSFXChannel
+    )
+
     damages.remove(damage)
 
     RegisterAction(f'Damage reached terminal at ({damage["X"]}, {damage["Y"]})')
@@ -4297,14 +5218,134 @@ modalCard = tk.Frame(
 
 modalCard.place_forget()
 
+buzzCanvas = tk.Canvas(
+    wn,
+    bg = 'black',
+    highlightthickness = 0,
+    bd = 0
+)
+
+buzzCanvas.place_forget()
+
+volumeButton = PixelButton(
+    wn,
+    command = ToggleVolumePanel,
+    anchor = 'center'
+)
+
+if volumeIconImage is not None:
+    volumeButton.config(
+        image = volumeIconImage
+    )
+
+else:
+    volumeButton.config(
+        text = 'VOL'
+    )
+
+StyleButton(
+    volumeButton,
+    BUTTON,
+    CREAM,
+    TEAL
+)
+
+volumeButton.config(
+    width = S(28),
+    height = S(28),
+    padx = S(5),
+    pady = S(5)
+)
+
+volumePanel = tk.Frame(
+    wn,
+    bg = DARK,
+    highlightbackground = TEAL,
+    highlightthickness = S(1)
+)
+
+volumePanelTitle = tk.Label(
+    volumePanel,
+    text = 'MASTER',
+    bg = DARK,
+    fg = TEAL,
+    font = FONT_SMALL
+)
+
+volumePanelTitle.pack(
+    pady = (S(8), S(2))
+)
+
+masterVolumeSlider = tk.Scale(
+    volumePanel,
+    from_ = 100,
+    to = 0,
+    orient = 'vertical',
+    command = SetMasterVolume,
+    showvalue = False,
+    resolution = 1,
+    length = S(92),
+    width = S(9),
+    sliderlength = S(16),
+    bg = DARK,
+    fg = CREAM,
+    troughcolor = BUTTON,
+    activebackground = TEAL,
+    highlightthickness = 0,
+    bd = 0,
+    relief = 'flat'
+)
+
+masterVolumeSlider.set(
+    100
+)
+
+masterVolumeSlider.pack(
+    expand = True,
+    pady = S(2)
+)
+
+volumePercentLabel = tk.Label(
+    volumePanel,
+    text = '100%',
+    bg = DARK,
+    fg = CREAM,
+    font = FONT_SMALL
+)
+
+volumePercentLabel.pack(
+    pady = (S(2), S(7))
+)
+
+volumePanel.place_forget()
+
 wn.bind(
     '<Escape>',
     TogglePause
+)
+
+wn.bind(
+    '<Button-1>',
+    HandleVolumeOutsideClick,
+    add = '+'
 )
 
 ShowFrame(welcomeFrame)
 
 UpdateEndMissionButton()
 ShowPreMissionMenu()
+
+InitializeAudio()
+
+wn.update_idletasks()
+PositionVolumeControl()
+PrepareBuzzEffect(
+    False
+)
+
+wn.after(
+    120,
+    StartStartupSequence
+)
 
 wn.mainloop()

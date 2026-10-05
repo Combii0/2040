@@ -263,7 +263,7 @@ possibleActions = {
 
     'Transportation Emergency': {
         0: {
-            'Text': 'Redirect traffic through alternate outes',
+            'Text': 'Redirect traffic through alternate routes',
 
             'Energy': -2 * n,
             'Water': 0 * n,

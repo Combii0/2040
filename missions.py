@@ -20,7 +20,11 @@ def backupMissions():
     with open(backupPath, 'w', encoding = 'utf-8') as file:
         json.dump(m, file, indent = 4, ensure_ascii = False)
 
-filePath = os.path.join(os.path.dirname(__file__), 'missions.json')
+dataFolder = os.path.join(os.path.dirname(__file__), '.data')
+
+os.makedirs(dataFolder, exist_ok = True)
+
+filePath = os.path.join(dataFolder, 'missions.json')
 
 def saveMissions():
     with open(filePath, 'w', encoding = 'utf-8') as file:
