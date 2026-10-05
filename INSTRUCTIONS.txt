@@ -1,0 +1,344 @@
+ROBOYORK 2040
+INSTRUCCIONES DE INSTALACIÓN Y EJECUCIÓN
+========================================
+
+AUTOR
+Santiago Hernández Sotomonte
+
+PLATAFORMAS
+- Windows 10 / 11
+- macOS (Intel y Apple Silicon)
+- Linux (opcional: Ubuntu/Debian, Fedora, Arch y openSUSE)
+
+RoboYork utiliza un archivo de inicio distinto por sistema operativo:
+
+    Windows  -> START.bat
+    macOS    -> START.command
+    Linux    -> START.sh
+
+Cada launcher intenta:
+1. Ubicarse automáticamente en la carpeta del proyecto.
+2. Detectar Python.
+3. Instalar Python cuando el sistema dispone de un gestor compatible.
+4. Crear el entorno virtual .venv.
+5. Verificar pip.
+6. Instalar requirements.txt.
+7. Verificar Tkinter y pygame.
+8. Ejecutar main.py.
+
+NOTA:
+La instalación automática de Python no puede garantizarse en todos los equipos,
+ya que puede depender de permisos, gestores de paquetes o bloqueos de seguridad.
+Si falla, siga la alternativa manual indicada para su sistema.
+
+
+============================================================
+ARCHIVOS DEL PROYECTO
+============================================================
+
+Mantenga toda la carpeta de RoboYork junta.
+
+Debe incluir como mínimo:
+
+    main.py
+    events.py
+    missions.py
+    resources.py
+    users.py
+    requirements.txt
+
+    START.bat
+    START.command
+    START.sh
+
+    .data/
+        missions.json
+        operators.json
+
+    Resources/
+        pixeloid.ttf
+        pixeloid_bold.ttf
+        buzz.gif
+        Mechanical Process.mp3
+        Mechanissues.mp3
+
+        icons/
+            logo.png
+            volume.png
+
+        SFX/
+            sl.mp3
+            damage.mp3
+            pop.mp3
+            start.mp3
+
+Las carpetas .data/ y Backups/ pueden ser creadas automáticamente.
+No cambie nombres ni ubicaciones dentro de Resources/.
+
+
+============================================================
+WINDOWS 10 / 11
+============================================================
+
+MÉTODO RECOMENDADO
+
+1. Abra la carpeta de RoboYork.
+2. Haga doble clic en:
+
+       START.bat
+
+3. El launcher buscará Python con:
+
+       py
+       python
+
+4. Si Python no existe, intentará instalarlo mediante winget.
+5. Creará .venv.
+6. Instalará requirements.txt.
+7. Verificará Tkinter y pygame.
+8. Ejecutará main.py.
+
+SI PYTHON NO SE INSTALA AUTOMÁTICAMENTE
+
+1. Descargue Python 3 de 64 bits desde:
+
+       https://www.python.org/downloads/windows/
+
+2. Durante la instalación marque:
+
+       Add python.exe to PATH
+
+3. Mantenga Tcl/Tk habilitado.
+4. Finalice la instalación.
+5. Vuelva a ejecutar START.bat.
+
+No necesita instalar pygame manualmente.
+
+SI WINDOWS BLOQUEA EL ARCHIVO
+
+Windows puede mostrar SmartScreen.
+
+Si el archivo proviene del proyecto oficial:
+
+    Más información -> Ejecutar de todas formas
+
+ALTERNATIVA MANUAL
+
+Desde Símbolo del sistema, dentro de la carpeta del proyecto:
+
+       START.bat
+
+
+============================================================
+macOS
+============================================================
+
+MÉTODO RECOMENDADO
+
+1. Abra Terminal.
+2. Entre a la carpeta del proyecto. Ejemplo:
+
+       cd ~/Desktop/ROBOYORK_CONTROL/2040
+
+3. Solo la primera vez:
+
+       chmod +x START.command
+
+4. Ejecute:
+
+       ./START.command
+
+Después podrá intentar abrir START.command con doble clic desde Finder.
+
+El launcher:
+- busca python3;
+- usa Homebrew para instalar Python si está disponible;
+- crea .venv;
+- instala requirements.txt;
+- verifica Tkinter y pygame;
+- ejecuta main.py.
+
+SI NO HAY PYTHON NI HOMEBREW
+
+Instale Python desde:
+
+       https://www.python.org/downloads/macos/
+
+Luego vuelva a ejecutar START.command.
+
+El instalador oficial normalmente incluye Tcl/Tk para Tkinter.
+
+SI macOS DICE QUE START.command ESTÁ “DAÑADO”
+
+Puede ser un bloqueo de Gatekeeper por haber descargado o recibido el archivo.
+
+Desde Terminal, dentro de la carpeta del proyecto:
+
+       xattr -d com.apple.quarantine START.command 2>/dev/null
+       chmod +x START.command
+       ./START.command
+
+Si macOS aún lo bloquea:
+
+1. Haga clic derecho sobre START.command.
+2. Seleccione “Abrir”.
+3. Confirme nuevamente.
+
+También puede revisar:
+
+       Configuración del Sistema -> Privacidad y seguridad
+
+
+============================================================
+LINUX - OPCIONAL
+============================================================
+
+START.sh contempla:
+
+    Ubuntu / Debian -> apt
+    Fedora          -> dnf
+    Arch            -> pacman
+    openSUSE        -> zypper
+
+PRIMERA EJECUCIÓN
+
+1. Abra Terminal.
+2. Entre a la carpeta del proyecto.
+3. Ejecute:
+
+       chmod +x START.sh
+       ./START.sh
+
+El launcher intentará instalar Python, pip, venv y Tkinter cuando falten,
+crear .venv, instalar requirements.txt y ejecutar main.py.
+
+Puede solicitar contraseña de administrador.
+
+Si su distribución no utiliza uno de los gestores anteriores, instale
+manualmente:
+
+    Python 3
+    pip
+    venv
+    Tkinter
+
+y vuelva a ejecutar START.sh.
+
+
+============================================================
+DEPENDENCIAS
+============================================================
+
+MÓDULO EXTERNO
+
+Instalado automáticamente desde requirements.txt:
+
+    pygame
+
+BIBLIOTECA ESTÁNDAR / SISTEMA
+
+No se instala con pip:
+
+    tkinter
+    ttk
+    json
+    os
+    sys
+    random
+    ctypes
+    datetime
+
+NOTA:
+Tkinter forma parte de Python, pero en algunas distribuciones Linux debe
+instalarse como paquete del sistema.
+
+MÓDULOS LOCALES DEL PROYECTO
+
+    users.py
+    missions.py
+    resources.py
+    events.py
+
+
+============================================================
+SI EL JUEGO NO INICIA
+============================================================
+
+1. Verifique que todos los archivos permanezcan dentro de la misma carpeta.
+
+2. Compruebe que Resources/ conserve exactamente su estructura.
+
+3. Verifique estos archivos:
+
+       Resources/Mechanical Process.mp3
+       Resources/Mechanissues.mp3
+       Resources/buzz.gif
+
+       Resources/SFX/sl.mp3
+       Resources/SFX/damage.mp3
+       Resources/SFX/pop.mp3
+       Resources/SFX/start.mp3
+
+       Resources/icons/logo.png
+       Resources/icons/volume.png
+
+4. Si aparece:
+
+       No module named pygame
+
+   elimine .venv y vuelva a ejecutar el launcher correspondiente.
+
+5. Si Tkinter falla:
+
+   Windows / macOS:
+       Reinstale Python desde python.org asegurándose de incluir Tcl/Tk.
+
+   Linux:
+       Instale el paquete Tkinter correspondiente a su distribución.
+
+6. Si START.command o START.sh muestra:
+
+       Permission denied
+
+   ejecute:
+
+       chmod +x START.command
+
+   o:
+
+       chmod +x START.sh
+
+7. Si una instalación queda dañada o incompleta:
+
+       elimine la carpeta .venv
+
+   y ejecute nuevamente START.bat, START.command o START.sh.
+
+8. Si el programa todavía no inicia, revise el último mensaje mostrado en la
+   terminal. Normalmente indica la dependencia o archivo faltante.
+
+
+
+
+⠀⠀⠀⠀⠀⠀⠀⣀⣀⣠⣤⣤⣤⣤⣤⣤⣄⣀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⣠⡶⠿⠿⢛⣩⣭⣶⣶⣶⣶⣦⣭⣙⠿⣶⣤⣀⠀⠀⠀⠀
+⠀⠀⠀⣾⠁⠀⣠⣶⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣷⠈⠛⠿⣷⡄⠀⠀
+⠀⠀⢠⣿⠀⣴⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠀⠀⠀⠈⣿⠀⠀
+⠀⠀⢸⡟⣼⡿⢉⡉⢿⣿⡿⠿⠿⣿⣿⣿⠛⠛⣿⣧⠀⠀⣸⡿⠀⠀
+⠀⠀⢸⡇⣿⡇⠘⠃⣸⠁⠀⠀⠀⠀⢹⡇⠸⠇⢸⣿⣷⠆⣿⡇⠀⠀
+⠀⠀⠈⣿⡘⣿⢶⣶⡿⣦⣀⣀⣀⣠⣾⣷⣤⣤⢿⣿⣿⢰⡿⠁⠀⠀
+⠀⠀⠀⠈⢷⣜⢿⣯⣿⣟⣡⣶⣌⠻⣿⣯⣿⣻⣿⡿⣡⣿⠁⠀⠀⠀
+⠀⠀⠀⣀⣼⡇⢲⣈⣴⣶⡙⣿⡿⢋⣭⣉⣰⣶⣦⢰⣿⠁⠀⠀⠀⠀
+⣠⡾⢟⣛⣋⣭⡤⢡⣿⣿⣧⣶⣦⡹⢛⣩⣴⣮⡉⢼⡏⠀⠀⠀⠀⠀
+⢻⣦⡻⠿⢿⣿⢡⣿⠟⢋⣭⣭⠙⣰⣿⣿⠿⡋⢀⣾⣧⣤⣄⡀⠀⠀
+⠀⠉⠻⠿⢷⡆⣿⡇⣾⢸⣿⡟⣴⣤⢠⣴⣶⣾⡌⠟⠋⠉⠙⠻⢷⣄
+⠀⠀⠀⠀⢸⡇⢿⣿⣎⢘⣿⣇⠛⣫⣼⣿⣿⣿⠇⠀⠀⠀⠀⠀⣀⡿
+⠀⠀⠀⠀⠘⢷⡘⢿⣿⣦⣬⣥⣵⣿⣿⣿⣿⠟⣀⣠⣤⣴⠶⠛⠉⠀
+⠀⠀⠀⠀⢀⣼⠟⠂⠉⠛⠛⠿⠿⠿⠟⠛⠁⠘⢿⣿⡉⠀⠀⠀⠀⠀
+⠀⠀⠀⢠⣿⡃⠀⠀⠀⢀⣾⡿⠿⢿⣧⠀⠀⠀⠀⢹⣷⠀⠀⠀⠀⠀
+⠀⠀⠀⠈⠛⠿⠿⠿⠿⠟⠉⠀⠀⠈⠛⠿⠿⠿⠿⠿⠋⠀⠀⠀⠀⠀
+
+
+
+
+
