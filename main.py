@@ -1695,8 +1695,19 @@ def SaveBackup():
         '%Y-%m-%d_%H-%M-%S.json'
     )
 
+    backupFolder = os.path.join(
+        os.path.dirname(__file__),
+        'Backups'
+    )
+
+    os.makedirs(
+        backupFolder,
+        exist_ok = True
+    )
+
     backupPath = filedialog.asksaveasfilename(
         title = 'Save Backup',
+        initialdir = backupFolder,
         initialfile = defaultName,
         defaultextension = '.json',
         filetypes = [
